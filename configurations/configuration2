@@ -1,0 +1,8 @@
+name: oozie430hadoop265
+components:
+  hadoop:
+   release: 2.6.5
+#    snapshot: ~/hadoop-2.6.0
+  oozie:
+#    snapshot: ~/OOZIE/oozie/distro/target/oozie-4.3.0-distro/oozie-4.3.0
+    release: 4.3.0
