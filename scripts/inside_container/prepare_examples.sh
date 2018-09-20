@@ -19,7 +19,7 @@ function wait_for_oozie {
     # while ! jps | grep -q EmbeddedOozieServer
     # while ! jps | grep -q -i Oozie
     # while ! bin/oozie admin -status
-    while ! jps | grep -E -q 'EmbeddedOozieServer|Bootstrap'
+    while ! jps | grep -E -q 'EmbeddedOozieServer|Bootstrap' # EmbeddedOozieServer for newer versions, Bootstrap for 4.3.0.
     do
         sleep 0.5
     done

@@ -1,8 +1,8 @@
-name: oozie500hadoop265
+name: oozie_upstream_hadoop265
 components:
   hadoop:
    release: 2.6.5
 #    snapshot: ~/hadoop-2.6.0
   oozie:
-#    snapshot: ~/OOZIE/oozie/distro/target/oozie-4.3.0-distro/oozie-4.3.0
-    release: 5.0.0
+   snapshot: symlink_to_oozie_distro
+#    release: 5.0.0

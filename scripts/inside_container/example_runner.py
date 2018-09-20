@@ -7,15 +7,23 @@ Oozie examples uploaded to hdfs.
 """
 
 import argparse
+import json
+import logging
 
 from pathlib import Path
 
+import pickle
 import re
 import subprocess
 import sys
 import time
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
+
+import urllib.request
+import xml.etree.ElementTree as ET
+
+import report
 
 def get_all_example_dirs(example_dir: Path) -> Iterable[Path]:
     """
@@ -97,7 +105,7 @@ def kill_job(job_id: str) -> int:
     process_result = subprocess.run(kill_command, stderr=subprocess.PIPE)
     return process_result.returncode
 
-def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -> str:
+def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -> report.Result:
     """
     Waits for an Oozie job to finish, polling it regularly with a period of `poll_time`.
     If the job does not finish before the given timeout is elapsed, it is killed.
@@ -108,7 +116,7 @@ def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -
         timeout: The timeout value after which the job is killed, in seconds.
 
     Returns:
-        A message indicating the status in case the job finished or a message informing that the job timed out.
+        The job result.
 
     """
 
@@ -121,12 +129,12 @@ def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -
 
     # pylint: disable=no-else-return
     if status == "RUNNING":
-        print("Timed out waiting for example {} to finish, killing it.".format(EXAMPLE_DIR.name))
+        logging.info("Timed out waiting for example %s to finish, killing it.", EXAMPLE_DIR.name)
         kill_job(job_id)
-        return "Timed out."
+        return report.Result.TIMED_OUT
     else:
-        print("Status: {}.".format(status))
-        return status
+        logging.info("Status: %s.", status)
+        return report.Result[status]
 
 def launch_example(example_dir: Path, cli_options: List[str]) -> Union[str, int]:
     """
@@ -149,7 +157,7 @@ def launch_example(example_dir: Path, cli_options: List[str]) -> Union[str, int]
                "-run"]
     command.extend(cli_options)
 
-    print("Running command: {}.".format(" ".join(command)))
+    logging.info("Running command: %s.", " ".join(command))
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     return_code = process_result.returncode
@@ -171,7 +179,7 @@ def run_examples(examples: Iterable[Path],
                  blacklist: List[str],
                  cli_options: Dict[str, List[str]],
                  poll_time: int = 1,
-                 timeout: int = 60) -> Dict[str, str]:
+                 timeout: int = 60) -> List[report.ReportRecord]:
     """
     Runs the Oozie examples contained in the directories in `examples`. Returns a dictionary of the results.
 
@@ -186,46 +194,59 @@ def run_examples(examples: Iterable[Path],
         timeout: The timeout value after which the jobs are killed, in seconds.
 
     Returns:
-        A dictionary with the results of running the examples.
+        A list of ReportRecord objects holding the results of running the examples.
 
     """
 
-    results: Dict[str, str] = dict()
+    results: List[report.ReportRecord] = []
 
     for example_dir in examples:
+        report_record: report.ReportRecord
         if example_dir.name in blacklist:
-            print("Omitting blacklisted example: {}.".format(example_dir.name))
+            logging.info("Skipping blacklisted example: %s.", example_dir.name)
+            report_record = report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
         elif whitelist is not None and example_dir.name not in whitelist:
-           print("Omitting non-whitelisted example: {}.".format(example_dir.name))
+           logging.info("Skipping non-whitelisted example: %s.", example_dir.name)
+           report_record = report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
         else:
-            print("Running example {}.".format(example_dir.name))
+            logging.info("Running example %s.", example_dir.name)
 
             options = (cli_options.get("all", []))
             options.extend(cli_options.get(example_dir.name, []))
             launch_result = launch_example(example_dir, options)
 
             if isinstance(launch_result, int):
-                print("Starting example {} failed with exit code {}.".format(example_dir.name, launch_result))
-                results[example_dir.name] = "Starting failed with exit code {}.".format(launch_result)
+                logging.info("Starting example %s failed with exit code %s.", example_dir.name, launch_result)
+                report_record = report.ReportRecord(example_dir.name, report.Result.ERROR, None, [])
             else:
-                results[example_dir.name] = wait_for_job_to_finish(launch_result, poll_time, timeout)
-        print()
+                logging.info("Oozie job id: %s.", launch_result)
+
+                final_status = wait_for_job_to_finish(launch_result, poll_time, timeout)
+                applications = get_yarn_applications_of_job(launch_result)
+                report_record = report.ReportRecord(example_dir.name, final_status, launch_result, applications)
+        results.append(report_record)
 
     return results
 
-def print_report(results: Dict[str, str]):
-    """
-    Prints the results of running the examples.
+def _get_application_name_from_external_id(external_id: str) -> str:
+    if external_id.startswith("application"):
+        return external_id
+    else:
+        index = external_id.find("_")
+        return "application{}".format(external_id[index:])
 
-    Args:
-        results: The results of running the examples.
+def get_yarn_applications_of_job(job_id: str) -> List[str]:
+    url = "http://localhost:11000/oozie/v1/job/{}?show=info".format(job_id)
+    response: str
+    with urllib.request.urlopen(url) as connection:
+        response = connection.read().decode()
 
-    """
+    json_dict = json.loads(response)
+    actions = json_dict["actions"]
 
-    sorted_tests = sorted(list(results.keys()))
-
-    for test in sorted_tests:
-        print("{}:\t{}".format(test, results[test]))
+    yarn_actions = filter(lambda action: action["externalId"] != "-", actions)
+    return list(map(lambda yarn_action: _get_application_name_from_external_id(yarn_action["externalId"]),
+                    yarn_actions))
 
 def default_cli_options() -> Dict[str, List[str]]:
     """
@@ -254,6 +275,9 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--blacklist",
                         metavar="BLACKLIST", nargs="*",
                         help="Do not run the blacklisted examples.")
+    parser.add_argument("-l", "--logfile", help="The logfile.")
+    parser.add_argument("-r", "--report_records",
+                        help="The file to which the report records will be written, as a pickled Python object.")
 
     return parser
 
@@ -261,19 +285,31 @@ def main() -> None:
     """
     The entry point of the script.
     """
+
     parser = get_argument_parser()
     args = parser.parse_args()
+
+    logfile = args.logfile if args.logfile is not None else "example_runner.log"
+    LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    logging.basicConfig(format=LOGGING_FORMAT,
+                        level=logging.INFO,
+                        filename=logfile)
     
     example_dirs = get_all_example_dirs(EXAMPLE_DIR)
-    results = run_examples(example_dirs,
-                           args.whitelist,
-                           args.blacklist if args.blacklist is not None else BLACKLIST,
-                           default_cli_options(),
-                           1,
-                           120)
-    print_report(results)
+    report_records = run_examples(example_dirs,
+                                  args.whitelist,
+                                  args.blacklist if args.blacklist is not None else BLACKLIST,
+                                  default_cli_options(),
+                                  1,
+                                  120)
 
-    if not all(map(lambda s: s == "SUCCEEDED", results.values())):
+    report_and_log_dir = Path("report_and_logs")
+
+    report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
+    with open(report_records_file, "wb") as file:
+        pickle.dump(report_records, file)
+
+    if not all(map(lambda r: r.result == report.Result.SUCCEEDED or r.result == report.Result.SKIPPED, report_records)):
         sys.exit(1)
 
 if __name__ == "__main__":
