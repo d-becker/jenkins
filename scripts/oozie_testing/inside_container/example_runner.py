@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-This module provides functions to detect and run the Oozie examples. It should be run on the Oozie server, with the
-Oozie examples uploaded to hdfs.
+This module provides functions to detect and run the Oozie examples.
+It should be run on the Oozie server, with the Oozie examples uploaded to hdfs.
 
 """
 
@@ -18,12 +18,19 @@ import subprocess
 import sys
 import time
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import urllib.request
-import xml.etree.ElementTree as ET
 
-import report
+# pylint: disable=useless-import-alias
+
+if __name__ == "__main__":
+    # We are running the script inside the container.
+    import report
+else:
+    import oozie_testing.inside_container.report as report
+
+# pylint: enable=useless-import-alias
 
 def get_all_example_dirs(example_dir: Path) -> Iterable[Path]:
     """
@@ -174,6 +181,37 @@ def launch_example(example_dir: Path, cli_options: List[str]) -> Union[str, int]
 
     return job_id
 
+def _get_example_result(example_dir: Path,
+                        whitelist: Optional[List[str]],
+                        blacklist: List[str],
+                        cli_options: Dict[str, List[str]],
+                        poll_time: int,
+                        timeout: int) -> report.ReportRecord:
+    if example_dir.name in blacklist:
+        logging.info("Skipping blacklisted example: %s.", example_dir.name)
+        return report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
+
+    if whitelist is not None and example_dir.name not in whitelist:
+        logging.info("Skipping non-whitelisted example: %s.", example_dir.name)
+        return report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
+
+    logging.info("Running example %s.", example_dir.name)
+
+    options = (cli_options.get("all", []))
+    options.extend(cli_options.get(example_dir.name, []))
+    launch_result = launch_example(example_dir, options)
+
+    if isinstance(launch_result, int):
+        logging.info("Starting example %s failed with exit code %s.", example_dir.name, launch_result)
+        return report.ReportRecord(example_dir.name, report.Result.ERROR, None, [])
+
+    logging.info("Oozie job id: %s.", launch_result)
+
+    final_status = wait_for_job_to_finish(launch_result, poll_time, timeout)
+    applications = get_yarn_applications_of_job(launch_result)
+
+    return report.ReportRecord(example_dir.name, final_status, launch_result, applications)
+
 def run_examples(examples: Iterable[Path],
                  whitelist: Optional[List[str]],
                  blacklist: List[str],
@@ -198,44 +236,29 @@ def run_examples(examples: Iterable[Path],
 
     """
 
-    results: List[report.ReportRecord] = []
-
-    for example_dir in examples:
-        report_record: report.ReportRecord
-        if example_dir.name in blacklist:
-            logging.info("Skipping blacklisted example: %s.", example_dir.name)
-            report_record = report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
-        elif whitelist is not None and example_dir.name not in whitelist:
-           logging.info("Skipping non-whitelisted example: %s.", example_dir.name)
-           report_record = report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
-        else:
-            logging.info("Running example %s.", example_dir.name)
-
-            options = (cli_options.get("all", []))
-            options.extend(cli_options.get(example_dir.name, []))
-            launch_result = launch_example(example_dir, options)
-
-            if isinstance(launch_result, int):
-                logging.info("Starting example %s failed with exit code %s.", example_dir.name, launch_result)
-                report_record = report.ReportRecord(example_dir.name, report.Result.ERROR, None, [])
-            else:
-                logging.info("Oozie job id: %s.", launch_result)
-
-                final_status = wait_for_job_to_finish(launch_result, poll_time, timeout)
-                applications = get_yarn_applications_of_job(launch_result)
-                report_record = report.ReportRecord(example_dir.name, final_status, launch_result, applications)
-        results.append(report_record)
-
-    return results
+    return list(map(
+        lambda example_dir: _get_example_result(example_dir, whitelist, blacklist, cli_options, poll_time, timeout),
+        examples))
 
 def _get_application_name_from_external_id(external_id: str) -> str:
     if external_id.startswith("application"):
         return external_id
-    else:
-        index = external_id.find("_")
-        return "application{}".format(external_id[index:])
+
+    index = external_id.find("_")
+    return "application{}".format(external_id[index:])
 
 def get_yarn_applications_of_job(job_id: str) -> List[str]:
+    """
+    Retrieves the id's of the yarn applications of the provided Oozie job.
+
+    Args:
+        job_id: The id of the Oozie job.
+
+    Returns:
+        A list with the id's of the yarn applications of the provided Oozie job.
+
+    """
+
     url = "http://localhost:11000/oozie/v1/job/{}?show=info".format(job_id)
     response: str
     with urllib.request.urlopen(url) as connection:
@@ -265,6 +288,14 @@ BLACKLIST: List[str] = ["hcatalog"]
 EXAMPLE_DIR = Path("~/examples/apps").expanduser()
 
 def get_argument_parser() -> argparse.ArgumentParser:
+    """
+    Builds and returns an argument parser for the script entry point.
+
+    Returns:
+        An argument parser for the script entry point.
+
+    """
+
     parser = argparse.ArgumentParser(description="Run the Oozie examples.\n" +
                                      "If no whitelist is provided, the examples are discovered automatically.\n" +
                                      "If both a whitelist and a blacklist are specified, only those examples " +
@@ -286,15 +317,14 @@ def main() -> None:
     The entry point of the script.
     """
 
-    parser = get_argument_parser()
-    args = parser.parse_args()
+    args = get_argument_parser().parse_args()
 
     logfile = args.logfile if args.logfile is not None else "example_runner.log"
-    LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logging.basicConfig(format=LOGGING_FORMAT,
+    logging_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    logging.basicConfig(format=logging_format,
                         level=logging.INFO,
                         filename=logfile)
-    
+
     example_dirs = get_all_example_dirs(EXAMPLE_DIR)
     report_records = run_examples(example_dirs,
                                   args.whitelist,
@@ -302,8 +332,6 @@ def main() -> None:
                                   default_cli_options(),
                                   1,
                                   120)
-
-    report_and_log_dir = Path("report_and_logs")
 
     report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
     with open(report_records_file, "wb") as file:

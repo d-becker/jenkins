@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+This module provides a class to store the results of and additional information about an Oozie job that was run.
+"""
+
 from enum import Enum, auto, unique
 from typing import List, Optional
 
@@ -17,11 +21,26 @@ class Result(Enum):
     ERROR = auto()
 
 class ReportRecord:
+    """
+    A class that stores the results of and additional information about an Oozie job that was run.
+    """
+
     def __init__(self,
                  name: str,
                  result: Result,
                  oozie_job_id: Optional[str],
                  applications: List[str]) -> None:
+        """
+        Creates `ReportRecord` object.
+
+        Args:
+            name: The name of the Oozie job.
+            result: The result of the Oozie job.
+            oozie_job_id: The id of the Oozie job.
+            applications: The id's of the yarn applications of the Oozie job.
+
+        """
+
         self.name = name
         self.result = result
         self.oozie_job_id = oozie_job_id
