@@ -5,8 +5,11 @@ This module provides functions to detect and run the Oozie examples.
 It should be run on the Oozie server, with the Oozie examples uploaded to hdfs.
 
 """
+from abc import ABCMeta, abstractmethod
 
 import argparse
+import io
+import itertools
 import json
 import logging
 
@@ -16,9 +19,11 @@ import pickle
 import re
 import subprocess
 import sys
+import tempfile
 import time
+import traceback
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import urllib.request
 
@@ -31,6 +36,213 @@ else:
     import oozie_testing.inside_container.report as report
 
 # pylint: enable=useless-import-alias
+
+def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union[str, int]:
+    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    return_code = process_result.returncode
+    if return_code != 0:
+        return return_code
+
+    output = process_result.stdout.decode()
+
+    match = re.search("job:(.*)", output)
+    if match is None:
+        raise ValueError("The job id could not be determined for example {}".format(example_name))
+
+    job_id = match.group(1).strip()
+
+    return job_id
+
+class Example(metaclass=ABCMeta):
+    """
+    A base class for Oozie examples.
+    """
+
+    @abstractmethod
+    def name(self) -> str:
+        """
+        Returns the name of the Oozie example. This is not necessarily the same
+        as the name of the Oozie job resulting from running the example.
+
+        Returns:
+            The name of the Oozie example.
+
+        """
+
+        pass
+
+    @abstractmethod
+    def launch(self, cli_options: List[str]) -> Union[str, int]:
+        """
+        Launches the Oozie example.
+
+        Args:
+            cli_options: The CLI options to use when launching the example.
+
+        Returns:
+            The job_id of the launched Oozie example if launching it was successful;
+            otherwise the error code of the launch subprocess.
+
+        """
+        pass
+
+class NormalExample(Example):
+    """
+    A class representing a normal (non-fluent job) Oozie example.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._name = path.name
+        self._path = path
+
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def path(self) -> Path:
+        """
+        Returns the path that the Oozie example files are located in.
+
+        Returns:
+            The path that the Oozie example files are located in.
+
+        """
+
+        return self._path
+
+    def launch(self, cli_options: List[str]) -> Union[str, int]:
+        command = ["/opt/oozie/bin/oozie",
+                   "job",
+                   "-config",
+                   str(self.path / "job.properties"),
+                   "-run"]
+        command.extend(map(lambda option: "-D" + option, cli_options))
+
+        logging.info("Running command: %s.", " ".join(command))
+
+        return _launch_oozie_job_by_command(command, self.name())
+
+class FluentExample(Example):
+    """
+    A class representing a fluent job Oozie example.
+    """
+
+    def __init__(self,
+                 oozie_version: str,
+                 oozie_fluent_job_api_jar: Path,
+                 example_dir: Path,
+                 class_name: str) -> None:
+        self._oozie_version = oozie_version
+        self._oozie_fluent_job_api_jar = oozie_fluent_job_api_jar
+        self._example_dir = example_dir
+        self._class_name = class_name
+
+    def name(self) -> str:
+        return "Fluent_{}".format(self._class_name)
+
+    @property
+    def class_name(self) -> str:
+        """
+        Returns the name of the Oozie fluent job example main class.
+
+        Returns:
+            The name of the Oozie fluent job example main class.
+
+        """
+
+        return self._class_name
+
+    def launch(self, cli_options: List[str]) -> Union[str, int]:
+        with tempfile.TemporaryDirectory() as tmp:
+            (jar_path, job_properties_file) = self._build_example(tmp, cli_options)
+            cmd_run = ["/opt/oozie/bin/oozie", "job", "-runjar", str(jar_path), "-config", str(job_properties_file)]
+
+            return _launch_oozie_job_by_command(cmd_run, self.name())
+
+    def _build_example(self, tmp: str, cli_options: List[str]) -> Tuple[Path, Path]:
+        packages = ["org", "apache", "oozie", "example", "fluentjob"]
+        java_file_name = self._class_name + ".java"
+        path_to_source_file = self._example_dir / "src" / "/".join(packages) / java_file_name
+        cmd_compile = ["javac",
+                       "-classpath", str(self._oozie_fluent_job_api_jar),
+                       str(path_to_source_file),
+                       "-d", tmp]
+        logging.info("Building fluent job example with command: %s", cmd_compile)
+        subprocess.run(cmd_compile, check=True)
+
+        tmp_path = Path(tmp)
+        jar_path = tmp_path / "fluent_{}.jar".format(self.class_name)
+        class_file_name = self._class_name + ".class"
+        path_to_class_file = Path("/".join(packages)) / class_file_name
+        cmd_jar = ["jar", "cfe", str(jar_path), "{}.{}".format(".".join(packages), self._class_name),
+                   "-C", tmp,
+                   str(path_to_class_file)]
+
+        logging.info("Creating fluent job jar file with command: %s", cmd_jar)
+        subprocess.run(cmd_jar, check=True)
+
+        job_properties_file = tmp_path / "job.properties"
+        self._create_job_properties(job_properties_file, cli_options, self._oozie_version)
+
+        return (jar_path, job_properties_file)
+
+    @staticmethod
+    def _create_job_properties(job_properties_file: Path, cli_options: List[str], oozie_version: str) -> None:
+        with job_properties_file.open("w") as file:
+            options = ["queueName=default", "examplesRoot=examples", "projectVersion={}".format(oozie_version)]
+            options.extend(cli_options)
+            file.write("\n".join(options))
+
+def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
+    """
+    Returns the normal (non-fluent job) examples contained in `example_apps_dir`.
+
+     Args:
+        example_apps_dirs: The `apps` subdirectory in the root directory of the Oozie examples.
+
+     Returns:
+        An iterable over the Oozie normal (non-fluent) examples.
+
+    """
+
+    return map(NormalExample, get_all_example_dirs(example_apps_dir))
+
+def _get_oozie_version() -> str:
+    url = "http://localhost:11000/oozie/v2/admin/build-version"
+    response: str
+    with urllib.request.urlopen(url) as connection:
+        response = connection.read().decode()
+
+    json_dict = json.loads(response)
+    return json_dict["buildVersion"]
+
+def get_all_fluent_examples(example_dir: Path) -> Iterable[FluentExample]:
+    """
+    Returns the fluent job examples contained in `example_dir`.
+
+     Args:
+        example_dirs: The root directory of the Oozie examples.
+
+     Returns:
+        An iterable over the Oozie fluent job examples.
+
+    """
+
+    oozie_version = _get_oozie_version()
+    lib = example_dir.expanduser().resolve().parent / "lib"
+    oozie_fluent_job_api_jar = lib / "oozie-fluent-job-api-{}.jar".format(oozie_version)
+
+    if not oozie_fluent_job_api_jar.exists():
+        raise FileNotFoundError("Library jar file does not exist: {}.".format(oozie_fluent_job_api_jar))
+
+    java_files: Iterable[Path] = (example_dir / "src" / "org" / "apache" / "oozie" / "example" / "fluentjob").iterdir()
+
+    into_fluent_example = lambda java_file: FluentExample(oozie_version,
+                                                          oozie_fluent_job_api_jar,
+                                                          example_dir,
+                                                          java_file.name.strip(".java"))
+    return map(into_fluent_example, java_files)
 
 def get_all_example_dirs(example_dir: Path) -> Iterable[Path]:
     """
@@ -143,76 +355,38 @@ def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -
         logging.info("Status: %s.", status)
         return report.Result[status]
 
-def launch_example(example_dir: Path, cli_options: List[str]) -> Union[str, int]:
-    """
-    Launches the Oozie example contained in `example_dir`.
-
-    Args:
-        example_dir: The directory containing the Oozie example.
-        cli_options: The CLI options to use when launching the example.
-
-    Returns:
-        The job_id of the launched Oozie example if launching it was successful;
-        otherwise the error code of the launch subprocess.
-
-    """
-
-    command = ["/opt/oozie/bin/oozie",
-               "job",
-               "-config",
-               str(example_dir / "job.properties"),
-               "-run"]
-    command.extend(cli_options)
-
-    logging.info("Running command: %s.", " ".join(command))
-    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    return_code = process_result.returncode
-    if return_code != 0:
-        return return_code
-
-    output = process_result.stdout.decode()
-
-    match = re.search("job:(.*)", output)
-    if match is None:
-        raise ValueError("The job id could not be determined for example {}".format(example_dir.name))
-
-    job_id = match.group(1).strip()
-
-    return job_id
-
-def _get_example_result(example_dir: Path,
+def _get_example_result(example: Example,
                         whitelist: Optional[List[str]],
                         blacklist: List[str],
                         cli_options: Dict[str, List[str]],
                         poll_time: int,
                         timeout: int) -> report.ReportRecord:
-    if example_dir.name in blacklist:
-        logging.info("Skipping blacklisted example: %s.", example_dir.name)
-        return report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
+    if example.name() in blacklist:
+        logging.info("Skipping blacklisted example: %s.", example.name())
+        return report.ReportRecord(example.name(), report.Result.SKIPPED, None, [])
 
-    if whitelist is not None and example_dir.name not in whitelist:
-        logging.info("Skipping non-whitelisted example: %s.", example_dir.name)
-        return report.ReportRecord(example_dir.name, report.Result.SKIPPED, None, [])
+    if whitelist is not None and example.name() not in whitelist:
+        logging.info("Skipping non-whitelisted example: %s.", example.name())
+        return report.ReportRecord(example.name(), report.Result.SKIPPED, None, [])
 
-    logging.info("Running example %s.", example_dir.name)
+    logging.info("Running example %s.", example.name())
 
     options = (cli_options.get("all", []))
-    options.extend(cli_options.get(example_dir.name, []))
-    launch_result = launch_example(example_dir, options)
+    options.extend(cli_options.get(example.name(), []))
+    launch_result = example.launch(options)
 
     if isinstance(launch_result, int):
-        logging.info("Starting example %s failed with exit code %s.", example_dir.name, launch_result)
-        return report.ReportRecord(example_dir.name, report.Result.ERROR, None, [])
+        logging.info("Starting example %s failed with exit code %s.", example.name(), launch_result)
+        return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
 
     logging.info("Oozie job id: %s.", launch_result)
 
     final_status = wait_for_job_to_finish(launch_result, poll_time, timeout)
     applications = get_yarn_applications_of_job(launch_result)
 
-    return report.ReportRecord(example_dir.name, final_status, launch_result, applications)
+    return report.ReportRecord(example.name(), final_status, launch_result, applications)
 
-def run_examples(examples: Iterable[Path],
+def run_examples(examples: Iterable[Example],
                  whitelist: Optional[List[str]],
                  blacklist: List[str],
                  cli_options: Dict[str, List[str]],
@@ -237,7 +411,7 @@ def run_examples(examples: Iterable[Path],
     """
 
     return list(map(
-        lambda example_dir: _get_example_result(example_dir, whitelist, blacklist, cli_options, poll_time, timeout),
+        lambda example: _get_example_result(example, whitelist, blacklist, cli_options, poll_time, timeout),
         examples))
 
 def _get_application_name_from_external_id(external_id: str) -> str:
@@ -277,15 +451,15 @@ def default_cli_options() -> Dict[str, List[str]]:
     """
 
     cli_options = dict()
-    cli_options["all"] = ["-DnameNode=hdfs://namenode:9000",
-                          "-DjobTracker=resourcemanager:8032",
-                          "-DresourceManager=resourcemanager:8032"]
-    cli_options["hive2"] = ["-DjdbcURL=jdbc:hive2://hiveserver2:10000/default"]
+    cli_options["all"] = ["nameNode=hdfs://namenode:9000",
+                          "jobTracker=resourcemanager:8032",
+                          "resourceManager=resourcemanager:8032"]
+    cli_options["hive2"] = ["jdbcURL=jdbc:hive2://hiveserver2:10000/default"]
 
     return cli_options
 
 BLACKLIST: List[str] = ["hcatalog"]
-EXAMPLE_DIR = Path("~/examples/apps").expanduser()
+EXAMPLE_DIR = Path("~/examples").expanduser()
 
 def get_argument_parser() -> argparse.ArgumentParser:
     """
@@ -317,25 +491,35 @@ def main() -> None:
     The entry point of the script.
     """
 
-    args = get_argument_parser().parse_args()
+    try:
+        args = get_argument_parser().parse_args()
 
-    logfile = args.logfile if args.logfile is not None else "example_runner.log"
-    logging_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logging.basicConfig(format=logging_format,
-                        level=logging.INFO,
-                        filename=logfile)
+        logfile = args.logfile if args.logfile is not None else "example_runner.log"
+        logging_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        logging.basicConfig(format=logging_format,
+                            level=logging.INFO,
+                            filename=logfile)
 
-    example_dirs = get_all_example_dirs(EXAMPLE_DIR)
-    report_records = run_examples(example_dirs,
-                                  args.whitelist,
-                                  args.blacklist if args.blacklist is not None else BLACKLIST,
-                                  default_cli_options(),
-                                  1,
-                                  120)
+        examples = get_all_normal_examples(EXAMPLE_DIR / "apps")
+        fluent_examples = get_all_fluent_examples(EXAMPLE_DIR)
+        report_records = run_examples(itertools.chain(examples, fluent_examples),
+                                      args.whitelist,
+                                      args.blacklist if args.blacklist is not None else BLACKLIST,
+                                      default_cli_options(),
+                                      1,
+                                      120)
 
-    report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
-    with open(report_records_file, "wb") as file:
-        pickle.dump(report_records, file)
+        report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
+        with open(report_records_file, "wb") as file:
+            pickle.dump(report_records, file)
+
+    # We catch all exceptions to be able to log them.
+    # pylint: disable=bare-except
+    except:
+        err_stream = io.StringIO()
+        traceback.print_exc(file=err_stream)
+        logging.error(err_stream.getvalue())
+        sys.exit(2)
 
     if not all(map(lambda r: r.result == report.Result.SUCCEEDED or r.result == report.Result.SKIPPED, report_records)):
         sys.exit(1)

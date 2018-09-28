@@ -3,7 +3,7 @@ pipeline {
 
     parameters {
         string(defaultValue: 'master', description: 'Oozie branch', name: 'oozie_branch')
-	string(defaultValue: 'map-reduce hive2',
+	string(defaultValue: 'map-reduce Fluent_JavaMain',
 	       description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
 	       name: 'whitelist')
 	string(defaultValue: 'hcatalog',
@@ -59,7 +59,7 @@ pipeline {
         }
         stage('junit') {
             steps {
-                junit testResults: 'testing/reports/*/report.xml' //, allowEmptyResults: true
+                junit testResults: 'testing/reports/*/report*.xml' //, allowEmptyResults: true
             }
         }
     }

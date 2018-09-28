@@ -119,7 +119,7 @@ def write_report(current_report_dir: Path,
         local_report_records_file.unlink()
 
         xml_report = output.generate_report(report_records, current_report_dir)
-        xml_report_file = current_report_dir / "report.xml"
+        xml_report_file = current_report_dir / "report_examples.xml"
         xml_report.write(str(xml_report_file))
 
 def perform_testing(args: argparse.Namespace,
@@ -145,24 +145,24 @@ def perform_testing(args: argparse.Namespace,
     oozieserver = test_env.get_oozieserver()
     test_env.setup_testing_env_in_container(oozieserver)
 
-    logfile = "example_runner.log"
-    report_records_file = "report_records.pickle"
+    examples_logfile = "example_runner.log"
+    examples_report_records_file = "report_records.pickle"
 
-    exit_code = oozie_testing.examples.test_oozie_with_dbd(oozieserver,
-                                                           logfile,
-                                                           report_records_file,
-                                                           args.whitelist,
-                                                           args.blacklist)
+    exit_code_examples = oozie_testing.examples.run_oozie_examples_with_dbd(oozieserver,
+                                                                            examples_logfile,
+                                                                            examples_report_records_file,
+                                                                            args.whitelist,
+                                                                            args.blacklist)
 
     current_report_dir = reports_dir / build_config_name
 
     nodemanager = test_env.get_nodemanager()
 
-    copy_logs(oozieserver.name, nodemanager.name, current_report_dir, logfile, report_records_file)
+    copy_logs(oozieserver.name, nodemanager.name, current_report_dir, examples_logfile, examples_report_records_file)
 
-    write_report(current_report_dir, report_records_file)
+    write_report(current_report_dir, examples_report_records_file)
 
-    return exit_code
+    return exit_code_examples
 
 def start_cluster_and_perform_testing(args: argparse.Namespace,
                                       reports_dir: Path,

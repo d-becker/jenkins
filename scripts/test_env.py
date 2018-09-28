@@ -53,7 +53,7 @@ def docker_compose_up(directory: Path) -> None:
 
     logging.info("Starting the dockerised cluster.")
     command_up = ["docker-compose", "up", "-d"]
-    subprocess.run(command_up, cwd=directory.expanduser().resolve())
+    subprocess.run(command_up, cwd=directory.expanduser().resolve(), check=True)
 
 def docker_compose_down(directory: Path) -> None:
     """
@@ -67,7 +67,7 @@ def docker_compose_down(directory: Path) -> None:
 
     logging.info("Stopping the dockerised cluster.")
     command_down = ["docker-compose", "down"]
-    subprocess.run(command_down, cwd=directory)
+    subprocess.run(command_down, cwd=directory, check=True)
 
 def docker_cp_to_container(container_name: str, source: str, dest: str) -> None:
     """
