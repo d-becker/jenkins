@@ -47,8 +47,25 @@ pipeline {
                 sh 'mkdir testing/output'
 
                 script {
-                    def script = "python3 scripts/test_stage.py configurations testing/output " +
-                                 "-c ${params.configuration_files} -w ${params.whitelist} -b ${params.blacklist}"
+                    def script_base = "python3 scripts/test_stage.py configurations testing/output "
+
+                    def script_build_config_files = ""
+                    if (params.configuration_files.length() > 0) {
+                        script_build_config_files = "-c ${params.configuration_files} "
+                    }
+
+                    def script_whitelist = ""
+                    if (params.whitelist.length() > 0) {
+                        script_whitelist = "-w ${params.whitelist} "
+                    }
+
+                    def script_blacklist = ""
+                    if (params.blacklist.length() > 0) {
+                        script_blacklist = "-b ${params.blacklist} "
+                    }
+
+                    def script = script_base + script_build_config_files + script_whitelist + script_blacklist
+
                     def returnCode = sh (script: script,
                                          returnStatus: true)
 
