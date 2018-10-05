@@ -55,6 +55,9 @@ def get_argument_parser() -> argparse.ArgumentParser:
                                      + "the Oozie examples within the resulting dockerised clusters.")
     parser.add_argument("configurations_dir", help="The directory in which the BuildConfiguration files are located.")
     parser.add_argument("output_dir", help="The directory in which the output of the build will be generated.")
+    parser.add_argument("-c", "--configurations", nargs="*",
+                        help="A list of filenames relative to `configurations_dir`. "
+                        + "If provided, only those `BuildConfiguration`s will be built.")
     parser.add_argument("-w", "--whitelist",
                         metavar="WHITELIST", nargs="*",
                         help="Only run the whitelisted examples. Otherwise, all detected examples are run.")
@@ -216,7 +219,7 @@ def main() -> None:
     dbd_path = Path("testing/dbd/dbd/dbd.py")
     cache_dir = Path("./dbd_cache")
 
-    dbd_build.build_configs_with_dbd(configurations_dir, output_dir, dbd_path, cache_dir)
+    dbd_build.build_configs_with_dbd(configurations_dir, args.configurations, output_dir, dbd_path, cache_dir)
 
     build_config_dirs = output_dir.expanduser().resolve().iterdir()
 

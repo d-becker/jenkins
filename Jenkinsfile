@@ -2,7 +2,12 @@ pipeline {
     agent { dockerfile true }
 
     parameters {
-        string(defaultValue: 'master', description: 'Oozie branch', name: 'oozie_branch')
+        string(defaultValue: 'master',
+               description: 'Oozie branch',
+               name: 'oozie_branch')
+	string(defaultValue: 'configuration',
+	       description: 'BuildConfiguration files to build.',
+	       name: 'configuration_files')
 	string(defaultValue: 'map-reduce Fluent_JavaMain',
 	       description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
 	       name: 'whitelist')
@@ -43,7 +48,7 @@ pipeline {
 
                 script {
                     def script = "python3 scripts/test_stage.py configurations testing/output " +
-		                 "-w ${params.whitelist} -b ${params.blacklist}"
+                                 "-c ${params.configuration_files} -w ${params.whitelist} -b ${params.blacklist}"
                     def returnCode = sh (script: script,
                                          returnStatus: true)
 
