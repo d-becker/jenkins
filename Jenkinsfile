@@ -1,5 +1,9 @@
 pipeline {
-    agent { dockerfile true }
+    agent {
+        dockerfile {
+            args '--mount \'type=volume,src=m2,dst=/root/.m2\''
+        }
+    }
 
     parameters {
         string(defaultValue: 'master',
@@ -37,9 +41,12 @@ pipeline {
         stage('build-oozie') {
             steps {
 	        // The condition is for testing purposes -- we would like to avoid having to build Oozie when testing.
-                sh '''/bin/bash -c "if [ ! -L symlink_to_oozie_distro ]; then cd testing/oozie \
-                                    && bin/mkdistro.sh -Puber -Ptez -DskipTests \
-                                    && ln -s testing/oozie/distro/target/oozie-*-distro/oozie-* symlink_to_oozie_distro; fi"'''
+                sh '''/bin/bash -c "if [ ! -L test_symlink_to_oozie_distro ]; then cd testing/oozie \
+                                        && bin/mkdistro.sh -Puber -Ptez -DskipTests \
+                                        && REL_PATH=(distro/target/oozie-*-distro/oozie-*) \
+                                        && echo $REL_PATH \
+                                        && ln -sf "$(pwd)/$REL_PATH" ../../symlink_to_oozie_distro; \
+                                     else ln -sf test_symlink_to_oozie_distro symlink_to_oozie_distro; fi"'''
             }
         }
         stage('dbd') {
