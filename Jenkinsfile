@@ -41,12 +41,12 @@ pipeline {
         stage('build-oozie') {
             steps {
 	        // The condition is for testing purposes -- we would like to avoid having to build Oozie when testing.
-                sh '''/bin/bash -c "if [ ! -L test_symlink_to_oozie_distro ]; then cd testing/oozie \
-                                        && bin/mkdistro.sh -Puber -Ptez -DskipTests \
-                                        && REL_PATH=(distro/target/oozie-*-distro/oozie-*) \
-                                        && echo $REL_PATH \
-                                        && ln -sf "$(pwd)/$REL_PATH" ../../symlink_to_oozie_distro; \
-                                     else ln -sf test_symlink_to_oozie_distro symlink_to_oozie_distro; fi"'''
+                // sh '''/bin/bash -c "if [ ! -L test_symlink_to_oozie_distro ]; then cd testing/oozie \
+                //                         && bin/mkdistro.sh -Puber -Ptez -DskipTests \
+                //                         && REL_PATH=(distro/target/oozie-*-distro/oozie-*) \
+                //                         && ln -sf "$(pwd)/$REL_PATH" ../../symlink_to_oozie_distro; \
+                //                      else ln -sf test_symlink_to_oozie_distro symlink_to_oozie_distro; fi"'''
+		sh 'scripts/build_oozie_and_symlink.sh'
             }
         }
         stage('dbd') {
