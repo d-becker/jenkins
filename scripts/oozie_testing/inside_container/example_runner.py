@@ -439,7 +439,7 @@ def get_yarn_applications_of_job(job_id: str) -> List[str]:
         response = connection.read().decode()
 
     json_dict = json.loads(response)
-    actions = json_dict["actions"]
+    actions = json_dict.get("actions", [])
 
     yarn_actions = filter(lambda action: action["externalId"] != "-", actions)
     return list(map(lambda yarn_action: _get_application_name_from_external_id(yarn_action["externalId"]),
