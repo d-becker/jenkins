@@ -373,8 +373,16 @@ def _get_example_result(example: Example,
 
     options = (cli_options.get("all", []))
     options.extend(cli_options.get(example.name(), []))
-    launch_result = example.launch(options)
-
+    launch_result: Union[str, int]
+    try:
+        launch_result = example.launch(options)
+    except:
+        err_stream = io.StringIO()
+        err_stream.write("An exception occured trying to launch the example {}.".format(example.name()))
+        traceback.print_exc(file=err_stream)
+        logging.error(err_stream.getvalue())        
+        return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
+        
     if isinstance(launch_result, int):
         logging.info("Starting example %s failed with exit code %s.", example.name(), launch_result)
         return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
