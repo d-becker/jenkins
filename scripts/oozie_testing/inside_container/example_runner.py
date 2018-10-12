@@ -462,7 +462,8 @@ def default_cli_options() -> Dict[str, List[str]]:
     cli_options = dict()
     cli_options["all"] = ["nameNode=hdfs://namenode:9000",
                           "jobTracker=resourcemanager:8032",
-                          "resourceManager=resourcemanager:8032"]
+                          "resourceManager=resourcemanager:8032",
+                          "oozie.use.system.libpath=true"]
     cli_options["hive2"] = ["jdbcURL=jdbc:hive2://hiveserver2:10000/default"]
 
     cli_options["Fluent_Spark"] = ["master=local[*]",
