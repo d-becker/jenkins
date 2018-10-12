@@ -465,6 +465,9 @@ def default_cli_options() -> Dict[str, List[str]]:
                           "resourceManager=resourcemanager:8032"]
     cli_options["hive2"] = ["jdbcURL=jdbc:hive2://hiveserver2:10000/default"]
 
+    cli_options["Fluent_Spark"] = ["master=local[*]",
+                                   "mode=client"]
+
     return cli_options
 
 BLACKLIST: List[str] = ["hcatalog"]
