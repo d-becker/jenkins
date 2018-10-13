@@ -523,7 +523,7 @@ def main() -> None:
                                       args.blacklist if args.blacklist is not None else BLACKLIST,
                                       default_cli_options(),
                                       1,
-                                      120)
+                                      180)
 
         report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
         with open(report_records_file, "wb") as file:
