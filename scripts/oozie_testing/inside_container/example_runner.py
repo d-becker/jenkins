@@ -496,6 +496,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--blacklist",
                         metavar="BLACKLIST", nargs="*",
                         help="Do not run the blacklisted examples.")
+    parser.add_argument("-t", "--timeout", type=int, help="The timeout after which running examples are killed.")
     parser.add_argument("-l", "--logfile", help="The logfile.")
     parser.add_argument("-r", "--report_records",
                         help="The file to which the report records will be written, as a pickled Python object.")
@@ -523,7 +524,7 @@ def main() -> None:
                                       args.blacklist if args.blacklist is not None else BLACKLIST,
                                       default_cli_options(),
                                       1,
-                                      180)
+                                      args.timeout if args.timeout is not None else 180)
 
         report_records_file = args.report_records if args.report_records is not None else "report_records.pickle"
         with open(report_records_file, "wb") as file:

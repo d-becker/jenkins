@@ -7,17 +7,20 @@ pipeline {
 
     parameters {
         string(defaultValue: 'master',
-               description: 'Oozie branch',
-               name: 'oozie_branch')
-	string(defaultValue: 'configuration',
-	       description: 'BuildConfiguration files to build.',
-	       name: 'configuration_files')
-	string(defaultValue: 'map-reduce Fluent_JavaMain',
-	       description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
-	       name: 'whitelist')
-	string(defaultValue: 'hcatalog',
-	       description: 'The names of the example tests that should be skipped.',
-	       name: 'blacklist')
+            description: 'Oozie branch',
+            name: 'oozie_branch')
+        string(defaultValue: 'configuration',
+            description: 'BuildConfiguration files to build.',
+            name: 'configuration_files')
+        string(defaultValue: 'map-reduce Fluent_JavaMain',
+            description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
+            name: 'whitelist')
+        string(defaultValue: 'hcatalog',
+            description: 'The names of the example tests that should be skipped.',
+            name: 'blacklist')
+        string(defaultValue: '180',
+            description: 'The timeout after which running examples are killed.',
+            name: 'timeout')
     }
 
     stages {
@@ -40,7 +43,7 @@ pipeline {
         }
         stage('build-oozie') {
             steps {
-		sh 'scripts/build_oozie_and_symlink.sh'
+                sh 'scripts/build_oozie_and_symlink.sh'
             }
         }
         stage('dbd') {
@@ -65,7 +68,12 @@ pipeline {
                         script_blacklist = "-b ${params.blacklist} "
                     }
 
-                    def script = script_base + script_build_config_files + script_whitelist + script_blacklist
+                    def script_timeout = ""
+                    if (params.timeout.length() > 0) {
+                        script_timeout = "-t ${params.timeout}"
+                    }
+
+                    def script = script_base + script_build_config_files + script_whitelist + script_blacklist + script_timeout
 
                     def returnCode = sh (script: script,
                                          returnStatus: true)

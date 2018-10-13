@@ -64,6 +64,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--blacklist",
                         metavar="BLACKLIST", nargs="*",
                         help="Do not run the blacklisted examples.")
+    parser.add_argument("-t", "--timeout", type=int, help="The timeout after which running examples are killed.")
 
     return parser
 
@@ -127,7 +128,8 @@ def write_report(current_report_dir: Path,
 
 def perform_testing(args: argparse.Namespace,
                     reports_dir: Path,
-                    build_config_name: str) -> int:
+                    build_config_name: str,
+                    timeout: int) -> int:
     """
     In a running dockerised cluster, performs the initialisation of the environment,
     runs the tests, collects the logs and generates the test report.
@@ -138,6 +140,7 @@ def perform_testing(args: argparse.Namespace,
             should be located. The reports for the individual `BuildConfigurations` will be placed in
             subdirectories with the name of the `BuildConfiguration`.
         build_config_name: The name of the current `BuildConfiguration`.
+        timeout: The timeout after which running examples are killed.
 
     Returns:
         The exit code of the process running the example tests inside the Oozie docker container.
@@ -155,7 +158,8 @@ def perform_testing(args: argparse.Namespace,
                                                                             examples_logfile,
                                                                             examples_report_records_file,
                                                                             args.whitelist,
-                                                                            args.blacklist)
+                                                                            args.blacklist,
+                                                                            timeout)
 
     current_report_dir = reports_dir / build_config_name
 
@@ -169,7 +173,8 @@ def perform_testing(args: argparse.Namespace,
 
 def start_cluster_and_perform_testing(args: argparse.Namespace,
                                       reports_dir: Path,
-                                      build_config_dir: Path) -> int:
+                                      build_config_dir: Path,
+                                      timeout: int) -> int:
     """
     Starts the dockerised cluster, performs initialisation and testing,
     collects the logs, generates the test report and stops the cluster.
@@ -181,6 +186,7 @@ def start_cluster_and_perform_testing(args: argparse.Namespace,
             subdirectories with the name of the `BuildConfiguration`.
         build_config_dir: The directory where the `BuildConfiguration`
             is built and where the docker-compose file is located.
+        timeout: The timeout after which running examples are killed.
 
     Returns:
         The exit code of the process running the example tests inside the Oozie docker container.
@@ -192,7 +198,7 @@ def start_cluster_and_perform_testing(args: argparse.Namespace,
 
     try:
         test_env.docker_compose_up(build_config_dir)
-        exit_code = perform_testing(args, reports_dir, build_config_dir.name)
+        exit_code = perform_testing(args, reports_dir, build_config_dir.name, timeout)
 
     # We catch all exceptions to be able to continue with other BuildConfigurations if there are any.
     # pylint: disable=broad-except
@@ -218,13 +224,14 @@ def main() -> None:
     reports_dir = Path("testing/reports")
     dbd_path = Path("testing/dbd/dbd/dbd.py")
     cache_dir = Path("./dbd_cache")
+    timeout = args.timeout if args.timeout is not None else 180
 
     dbd_build.build_configs_with_dbd(configurations_dir, args.configurations, output_dir, dbd_path, cache_dir)
 
     build_config_dirs = output_dir.expanduser().resolve().iterdir()
 
     test_exit_codes = map(
-        lambda build_config_dir: start_cluster_and_perform_testing(args, reports_dir, build_config_dir),
+        lambda build_config_dir: start_cluster_and_perform_testing(args, reports_dir, build_config_dir, timeout),
         build_config_dirs)
 
     max_exit_code = max(test_exit_codes)
