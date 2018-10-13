@@ -377,13 +377,15 @@ def _get_example_result(example: Example,
     launch_result: Union[str, int]
     try:
         launch_result = example.launch(options)
+    # We catch all exceptions to be able to log them.
+    # pylint: disable=bare-except
     except:
         err_stream = io.StringIO()
         err_stream.write("An exception occured trying to launch the example {}.".format(example.name()))
         traceback.print_exc(file=err_stream)
-        logging.error(err_stream.getvalue())        
+        logging.error(err_stream.getvalue())
         return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
-        
+
     if isinstance(launch_result, int):
         logging.info("Starting example %s failed with exit code %s.", example.name(), launch_result)
         return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
@@ -465,9 +467,9 @@ def default_cli_options() -> Dict[str, List[str]]:
                           "resourceManager=resourcemanager:8032",
                           "oozie.use.system.libpath=true"]
 
-    jdbcURL = "jdbcURL=jdbc:hive2://hiveserver2:10000/default"
-    cli_options["hive2"] = [jdbcURL]
-    cli_options["Fluent_CredentialsRetrying"] = [jdbcURL]
+    jdbc_url = "jdbcURL=jdbc:hive2://hiveserver2:10000/default"
+    cli_options["hive2"] = [jdbc_url]
+    cli_options["Fluent_CredentialsRetrying"] = [jdbc_url]
 
     cli_options["Fluent_Spark"] = ["master=local[*]",
                                    "mode=client"]
