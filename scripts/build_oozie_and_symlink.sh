@@ -5,7 +5,7 @@ function replace_symlink_if_exists {
     local source=$1
     local target=$2
 
-    if [ -e "$target" ]; then
+    if [ -L "$target" ]; then
 	rm "$target"
     fi
 
