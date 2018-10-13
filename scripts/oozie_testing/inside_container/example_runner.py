@@ -324,13 +324,14 @@ def kill_job(job_id: str) -> int:
     process_result = subprocess.run(kill_command, stderr=subprocess.PIPE)
     return process_result.returncode
 
-def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -> report.Result:
+def wait_for_job_to_finish(job_id: str, name: str, poll_time: int = 1, timeout: int = 60) -> report.Result:
     """
     Waits for an Oozie job to finish, polling it regularly with a period of `poll_time`.
     If the job does not finish before the given timeout is elapsed, it is killed.
 
     Args:
         job_id : The job_id of the Oozie job.
+        name: The name of the example.
         poll_time: The interval at which the job will be polled, in seconds.
         timeout: The timeout value after which the job is killed, in seconds.
 
@@ -348,7 +349,7 @@ def wait_for_job_to_finish(job_id: str, poll_time: int = 1, timeout: int = 60) -
 
     # pylint: disable=no-else-return
     if status == "RUNNING":
-        logging.info("Timed out waiting for example %s to finish, killing it.", EXAMPLE_DIR.name)
+        logging.info("Timed out waiting for example %s to finish, killing it.", name)
         kill_job(job_id)
         return report.Result.TIMED_OUT
     else:
@@ -389,7 +390,7 @@ def _get_example_result(example: Example,
 
     logging.info("Oozie job id: %s.", launch_result)
 
-    final_status = wait_for_job_to_finish(launch_result, poll_time, timeout)
+    final_status = wait_for_job_to_finish(launch_result, example.name(), poll_time, timeout)
     applications = get_yarn_applications_of_job(launch_result)
 
     return report.ReportRecord(example.name(), final_status, launch_result, applications)
