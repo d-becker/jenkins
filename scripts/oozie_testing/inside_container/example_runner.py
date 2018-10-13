@@ -463,7 +463,10 @@ def default_cli_options() -> Dict[str, List[str]]:
                           "jobTracker=resourcemanager:8032",
                           "resourceManager=resourcemanager:8032",
                           "oozie.use.system.libpath=true"]
-    cli_options["hive2"] = ["jdbcURL=jdbc:hive2://hiveserver2:10000/default"]
+
+    jdbcURL = "jdbcURL=jdbc:hive2://hiveserver2:10000/default"
+    cli_options["hive2"] = [jdbcURL]
+    cli_options["Fluent_CredentialsRetrying"] = [jdbcURL]
 
     cli_options["Fluent_Spark"] = ["master=local[*]",
                                    "mode=client"]
