@@ -29,7 +29,8 @@ class ReportRecord:
                  name: str,
                  result: Result,
                  oozie_job_id: Optional[str],
-                 applications: List[str]) -> None:
+                 applications: List[str],
+                 message: Optional[str] = None) -> None:
         """
         Creates `ReportRecord` object.
 
@@ -38,6 +39,7 @@ class ReportRecord:
             result: The result of the Oozie job.
             oozie_job_id: The id of the Oozie job.
             applications: The id's of the yarn applications of the Oozie job.
+            message: Information about the run.
 
         """
 
@@ -45,3 +47,4 @@ class ReportRecord:
         self.result = result
         self.oozie_job_id = oozie_job_id
         self.applications = applications
+        self.message = message

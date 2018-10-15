@@ -124,7 +124,10 @@ def generate_report(report_records: List[report.ReportRecord],
         # Aggregate the Yarn logs of the containers and add them to system-out and system-err elements.
         (stdout, stderr) = printable_logs_for_oozie_job(record, report_and_log_dir)
         stdout_element = ET.SubElement(testcase, "system-out")
-        stdout_element.text = stdout
+
+        stdout_element.text = ("Message:\n\n{}\n\nEnd of message".format(record.message) + stdout
+                               if record.message is not None
+                               else stdout)
         stderr_element = ET.SubElement(testcase, "system-err")
         stderr_element.text = stderr
 
