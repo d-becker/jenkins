@@ -269,11 +269,13 @@ class FluentExampleValidateOnly(FluentExampleBase):
             return_code = process_result.returncode
 
             final_status: report.Result
+            stdout = process_result.stdout.decode()
+            stderr = process_result.stderr.decode()
             if return_code == 0:
+                logging.info("Validation successful.")
                 final_status = report.Result.SUCCEEDED
             else:
-                stdout = process_result.stdout.decode()
-                stderr = process_result.stderr.decode()
+                logging.info("Validation error")
                 final_status = report.Result.ERROR
 
             return report.ReportRecord(self.name(), final_status, None, [], stdout, stderr)
@@ -334,7 +336,7 @@ def get_all_fluent_examples(example_dir: Path, validate_only: List[str]) -> Iter
                                                                                     example_dir,
                                                                                     java_file.name.strip(".java"))
     into_fluent_example = lambda java_file: (into_fluent_example_validate_only(java_file)
-                                             if java_file.stem in validate_only
+                                             if "Fluent_{}".format(java_file.stem) in validate_only
                                              else into_fluent_example_normal(java_file))
 
     return map(into_fluent_example, java_files)

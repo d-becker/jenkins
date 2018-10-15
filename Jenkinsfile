@@ -73,7 +73,7 @@ pipeline {
 
                     def script_validate_only = ""
                     if (params.validate_only.length() > 0) {
-                        script_timeout = "-t ${params.validate_only}"
+                        script_validate_only = "-v ${params.validate_only} "
                     }
 
                     def script_timeout = ""
