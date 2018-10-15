@@ -179,6 +179,18 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
         return self._class_name
 
     def build_example(self, tmp: str) -> Path:
+        """
+        Builds the fluent example in the provided (temporary) directory -
+        compiles the java source file and packages it in a jar.
+
+        Args:
+            tmp: The directory where the output of the build should be.
+
+        Returns:
+            The path to the produced jar file.
+
+        """
+
         packages = ["org", "apache", "oozie", "example", "fluentjob"]
         java_file_name = self._class_name + ".java"
         path_to_source_file = self._example_dir / "src" / "/".join(packages) / java_file_name
@@ -203,15 +215,28 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
         return jar_path
 
     @staticmethod
-    def create_job_properties(job_properties_file: Path, cli_options: List[str], oozie_version: str) -> None:
+    def create_job_properties(job_properties_file: Path, options: List[str], oozie_version: str) -> None:
+        """
+        Creates a job.properties file for the fluent example, using the provided options.
+
+        Args:
+            job_properties: The path to the job.properties file that will be created.
+            options: The options that should be in the job.properties file. The format is of each option is "key=value".
+
+        """
+
         with job_properties_file.open("w") as file:
             options = ["queueName=default", "examplesRoot=examples", "projectVersion={}".format(oozie_version)]
-            options.extend(cli_options)
+            options.extend(options)
             file.write("\n".join(options))
 
 # pylint: enable=abstract-method
 
 class FluentExample(FluentExampleBase):
+    """
+    A class representing fluent job examples that should be run, not only validated.
+    """
+
     def launch(self,
                cli_options: List[str],
                poll_time: int,
@@ -226,6 +251,10 @@ class FluentExample(FluentExampleBase):
             return _launch_and_wait_for_oozie_job(command, self.name(), poll_time, timeout)
 
 class FluentExampleValidateOnly(FluentExampleBase):
+    """
+    A class representing fluent job examples that should only be validated, not run.
+    """
+
     def launch(self,
                cli_options: List[str],
                _poll_time: int,
