@@ -10,17 +10,22 @@ from typing import List
 
 import docker
 
-def _command_with_whitelist_and_blacklist(cmd_base: str, whitelist: List[str], blacklist: List[str]) -> str:
+def _command_with_whitelist_and_blacklist(cmd_base: str,
+                                          whitelist: List[str],
+                                          blacklist: List[str],
+                                          validate: List[str]) -> str:
     cmd_whitelist = "-w {}".format(" ".join(whitelist)) if whitelist else ""
     cmd_blacklist = "-b {}".format(" ".join(blacklist)) if blacklist else ""
+    cmd_validate = "-v {}".format(" ".join(validate)) if validate else ""
 
-    return " ".join([cmd_base, cmd_whitelist, cmd_blacklist])
+    return " ".join([cmd_base, cmd_whitelist, cmd_blacklist, cmd_validate])
 
 def run_oozie_examples_with_dbd(oozieserver: docker.models.containers.Container,
                                 logfile: str,
                                 report_file: str,
                                 whitelist: List[str],
                                 blacklist: List[str],
+                                validate: List[str],
                                 timeout: int) -> int:
     """
     Runs the Oozie examples in the Oozie server docker container.
@@ -45,7 +50,7 @@ def run_oozie_examples_with_dbd(oozieserver: docker.models.containers.Container,
     cmd_base = "python3 /opt/oozie/inside_container/example_runner.py --logfile {} --report {}".format(logfile,
                                                                                                        report_file)
 
-    cmd_w_b_list = _command_with_whitelist_and_blacklist(cmd_base, whitelist, blacklist)
+    cmd_w_b_list = _command_with_whitelist_and_blacklist(cmd_base, whitelist, blacklist, validate)
     cmd = cmd_w_b_list + " -t {}".format(timeout)
 
     (errcode, _) = oozieserver.exec_run(cmd, workdir="/opt/oozie")

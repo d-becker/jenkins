@@ -23,7 +23,7 @@ import tempfile
 import time
 import traceback
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import urllib.request
 
@@ -54,6 +54,25 @@ def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union
 
     return job_id
 
+def _launch_and_wait_for_oozie_job(command: List[str],
+                                   example_name: str,
+                                   poll_time: int,
+                                   timeout: int) -> report.ReportRecord:
+    logging.info("Running command: %s.", " ".join(command))
+
+    launch_result = _launch_oozie_job_by_command(command, example_name)
+
+    if isinstance(launch_result, int):
+        logging.info("Starting example %s failed with exit code %s.", example_name, launch_result)
+        return report.ReportRecord(example_name, report.Result.ERROR, None, [])
+
+    logging.info("Oozie job id: %s.", launch_result)
+
+    final_status = wait_for_job_to_finish(launch_result, example_name, poll_time, timeout)
+    applications = get_yarn_applications_of_job(launch_result)
+
+    return report.ReportRecord(example_name, final_status, launch_result, applications)
+
 class Example(metaclass=ABCMeta):
     """
     A base class for Oozie examples.
@@ -73,16 +92,20 @@ class Example(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def launch(self, cli_options: List[str]) -> Union[str, int]:
+    def launch(self,
+               cli_options: List[str],
+               poll_time: int,
+               timeout: int) -> report.ReportRecord:
         """
         Launches the Oozie example.
 
         Args:
             cli_options: The CLI options to use when launching the example.
+            poll_time: The interval at which the job will be polled, in seconds.
+            timeout: The timeout value after which the job is killed, in seconds.
 
         Returns:
-            The job_id of the launched Oozie example if launching it was successful;
-            otherwise the error code of the launch subprocess.
+            A `report.ReportRecord` object storing the result of launching the example.
 
         """
         pass
@@ -111,7 +134,10 @@ class NormalExample(Example):
 
         return self._path
 
-    def launch(self, cli_options: List[str]) -> Union[str, int]:
+    def launch(self,
+               cli_options: List[str],
+               poll_time: int,
+               timeout: int) -> report.ReportRecord:
         command = ["/opt/oozie/bin/oozie",
                    "job",
                    "-config",
@@ -119,11 +145,10 @@ class NormalExample(Example):
                    "-run"]
         command.extend(map(lambda option: "-D" + option, cli_options))
 
-        logging.info("Running command: %s.", " ".join(command))
+        return _launch_and_wait_for_oozie_job(command, self.name(), poll_time, timeout)
 
-        return _launch_oozie_job_by_command(command, self.name())
-
-class FluentExample(Example):
+# pylint: disable=abstract-method
+class FluentExampleBase(Example, metaclass=ABCMeta):
     """
     A class representing a fluent job Oozie example.
     """
@@ -153,14 +178,7 @@ class FluentExample(Example):
 
         return self._class_name
 
-    def launch(self, cli_options: List[str]) -> Union[str, int]:
-        with tempfile.TemporaryDirectory() as tmp:
-            (jar_path, job_properties_file) = self._build_example(tmp, cli_options)
-            cmd_run = ["/opt/oozie/bin/oozie", "job", "-runjar", str(jar_path), "-config", str(job_properties_file)]
-
-            return _launch_oozie_job_by_command(cmd_run, self.name())
-
-    def _build_example(self, tmp: str, cli_options: List[str]) -> Tuple[Path, Path]:
+    def build_example(self, tmp: str) -> Path:
         packages = ["org", "apache", "oozie", "example", "fluentjob"]
         java_file_name = self._class_name + ".java"
         path_to_source_file = self._example_dir / "src" / "/".join(packages) / java_file_name
@@ -182,17 +200,54 @@ class FluentExample(Example):
         logging.info("Creating fluent job jar file with command: %s", cmd_jar)
         subprocess.run(cmd_jar, check=True)
 
-        job_properties_file = tmp_path / "job.properties"
-        self._create_job_properties(job_properties_file, cli_options, self._oozie_version)
-
-        return (jar_path, job_properties_file)
+        return jar_path
 
     @staticmethod
-    def _create_job_properties(job_properties_file: Path, cli_options: List[str], oozie_version: str) -> None:
+    def create_job_properties(job_properties_file: Path, cli_options: List[str], oozie_version: str) -> None:
         with job_properties_file.open("w") as file:
             options = ["queueName=default", "examplesRoot=examples", "projectVersion={}".format(oozie_version)]
             options.extend(cli_options)
             file.write("\n".join(options))
+
+# pylint: enable=abstract-method
+
+class FluentExample(FluentExampleBase):
+    def launch(self,
+               cli_options: List[str],
+               poll_time: int,
+               timeout: int) -> report.ReportRecord:
+        with tempfile.TemporaryDirectory() as tmp:
+            jar_path = self.build_example(tmp)
+            job_properties_file = Path(tmp) / "job.properties"
+            self.create_job_properties(job_properties_file, cli_options, self._oozie_version)
+
+            command = ["/opt/oozie/bin/oozie", "job", "-runjar", str(jar_path), "-config", str(job_properties_file)]
+
+            return _launch_and_wait_for_oozie_job(command, self.name(), poll_time, timeout)
+
+class FluentExampleValidateOnly(FluentExampleBase):
+    def launch(self,
+               cli_options: List[str],
+               _poll_time: int,
+               _timeout: int) -> report.ReportRecord:
+        with tempfile.TemporaryDirectory() as tmp:
+            jar_path = self.build_example(tmp)
+
+            command = ["/opt/oozie/bin/oozie", "job", "-validatejar", str(jar_path)]
+
+            logging.info("Validating fluent example %s with command %s.", self.name(), command)
+            process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return_code = process_result.returncode
+
+            final_status: report.Result
+            if return_code == 0:
+                final_status = report.Result.SUCCEEDED
+            else:
+                output = process_result.stdout.decode()
+                logging.info("Fluent example validation failed. Output: %s\n", output)
+                final_status = report.Result.ERROR
+
+            return report.ReportRecord(self.name(), final_status, None, [])
 
 def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
     """
@@ -217,12 +272,14 @@ def _get_oozie_version() -> str:
     json_dict = json.loads(response)
     return json_dict["buildVersion"]
 
-def get_all_fluent_examples(example_dir: Path) -> Iterable[FluentExample]:
+def get_all_fluent_examples(example_dir: Path, validate_only: List[str]) -> Iterable[FluentExampleBase]:
     """
-    Returns the fluent job examples contained in `example_dir`.
+    Returns the fluent job examples contained in `example_dir`. For the examples the names of which
+    is in the `validate_only` list, `FluentExampleValidateOnly` objects will be returned.
 
      Args:
         example_dirs: The root directory of the Oozie examples.
+        validate_only: A list of fluent examples that should only be validated, not run.
 
      Returns:
         An iterable over the Oozie fluent job examples.
@@ -238,10 +295,19 @@ def get_all_fluent_examples(example_dir: Path) -> Iterable[FluentExample]:
 
     java_files: Iterable[Path] = (example_dir / "src" / "org" / "apache" / "oozie" / "example" / "fluentjob").iterdir()
 
-    into_fluent_example = lambda java_file: FluentExample(oozie_version,
-                                                          oozie_fluent_job_api_jar,
-                                                          example_dir,
-                                                          java_file.name.strip(".java"))
+    into_fluent_example_normal = lambda java_file: FluentExample(oozie_version,
+                                                                 oozie_fluent_job_api_jar,
+                                                                 example_dir,
+                                                                 java_file.name.strip(".java"))
+
+    into_fluent_example_validate_only = lambda java_file: FluentExampleValidateOnly(oozie_version,
+                                                                                    oozie_fluent_job_api_jar,
+                                                                                    example_dir,
+                                                                                    java_file.name.strip(".java"))
+    into_fluent_example = lambda java_file: (into_fluent_example_validate_only(java_file)
+                                             if java_file.stem in validate_only
+                                             else into_fluent_example_normal(java_file))
+
     return map(into_fluent_example, java_files)
 
 def get_all_example_dirs(example_dir: Path) -> Iterable[Path]:
@@ -374,28 +440,17 @@ def _get_example_result(example: Example,
 
     options = (cli_options.get("all", []))
     options.extend(cli_options.get(example.name(), []))
-    launch_result: Union[str, int]
+
     try:
-        launch_result = example.launch(options)
+        return example.launch(options, poll_time, timeout)
     # We catch all exceptions to be able to log them.
     # pylint: disable=bare-except
     except:
         err_stream = io.StringIO()
-        err_stream.write("An exception occured trying to launch the example {}.".format(example.name()))
+        err_stream.write("An exception occured trying to run or validate the example {}.".format(example.name()))
         traceback.print_exc(file=err_stream)
         logging.error(err_stream.getvalue())
         return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
-
-    if isinstance(launch_result, int):
-        logging.info("Starting example %s failed with exit code %s.", example.name(), launch_result)
-        return report.ReportRecord(example.name(), report.Result.ERROR, None, [])
-
-    logging.info("Oozie job id: %s.", launch_result)
-
-    final_status = wait_for_job_to_finish(launch_result, example.name(), poll_time, timeout)
-    applications = get_yarn_applications_of_job(launch_result)
-
-    return report.ReportRecord(example.name(), final_status, launch_result, applications)
 
 def run_examples(examples: Iterable[Example],
                  whitelist: Optional[List[str]],
@@ -498,6 +553,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--blacklist",
                         metavar="BLACKLIST", nargs="*",
                         help="Do not run the blacklisted examples.")
+    parser.add_argument("-v", "--validate", nargs="*",
+                        help="A list of fluent examples that should only be validated, not run.")
     parser.add_argument("-t", "--timeout", type=int, help="The timeout after which running examples are killed.")
     parser.add_argument("-l", "--logfile", help="The logfile.")
     parser.add_argument("-r", "--report_records",
@@ -520,7 +577,8 @@ def main() -> None:
                             filename=logfile)
 
         examples = get_all_normal_examples(EXAMPLE_DIR / "apps")
-        fluent_examples = get_all_fluent_examples(EXAMPLE_DIR)
+        validate_only = args.validate if args.validate is not None else []
+        fluent_examples = get_all_fluent_examples(EXAMPLE_DIR, validate_only)
         report_records = run_examples(itertools.chain(examples, fluent_examples),
                                       args.whitelist,
                                       args.blacklist if args.blacklist is not None else BLACKLIST,

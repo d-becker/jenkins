@@ -18,6 +18,9 @@ pipeline {
         string(defaultValue: 'hcatalog',
             description: 'The names of the example tests that should be skipped.',
             name: 'blacklist')
+        string(defaultValue: 'Fluent_CredentialsRetrying',
+            description: 'A list of fluent examples that should only be validated, not run.',
+            name: 'validate_only')
         string(defaultValue: '180',
             description: 'The timeout after which running examples are killed.',
             name: 'timeout')
@@ -68,12 +71,19 @@ pipeline {
                         script_blacklist = "-b ${params.blacklist} "
                     }
 
+                    def script_validate_only = ""
+                    if (params.validate_only.length() > 0) {
+                        script_timeout = "-t ${params.validate_only}"
+                    }
+
                     def script_timeout = ""
                     if (params.timeout.length() > 0) {
                         script_timeout = "-t ${params.timeout}"
                     }
 
-                    def script = script_base + script_build_config_files + script_whitelist + script_blacklist + script_timeout
+                    def script = script_base + script_build_config_files +
+                                 script_whitelist + script_blacklist +
+                                 script_validate_only + script_timeout
 
                     def returnCode = sh (script: script,
                                          returnStatus: true)

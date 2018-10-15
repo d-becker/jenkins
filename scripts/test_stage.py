@@ -64,6 +64,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-b", "--blacklist",
                         metavar="BLACKLIST", nargs="*",
                         help="Do not run the blacklisted examples.")
+    parser.add_argument("-v", "--validate", nargs="*",
+                        help="A list of fluent examples that should only be validated, not run.")
     parser.add_argument("-t", "--timeout", type=int, help="The timeout after which running examples are killed.")
 
     return parser
@@ -159,6 +161,7 @@ def perform_testing(args: argparse.Namespace,
                                                                             examples_report_records_file,
                                                                             args.whitelist,
                                                                             args.blacklist,
+                                                                            args.validate,
                                                                             timeout)
 
     current_report_dir = reports_dir / build_config_name
