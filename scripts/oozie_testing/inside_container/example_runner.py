@@ -245,13 +245,9 @@ class FluentExampleValidateOnly(FluentExampleBase):
             else:
                 stdout = process_result.stdout.decode()
                 stderr = process_result.stderr.decode()
-
-                # TODO: Maybe split the message into 2 parts, stdout and stdin?
-                message = "Fluent example validation failed. Output:\nStdout:\n\n{}\n\nStderr\n\n{}".format(stdout,
-                                                                                                            stderr)
                 final_status = report.Result.ERROR
 
-            return report.ReportRecord(self.name(), final_status, None, [], message)
+            return report.ReportRecord(self.name(), final_status, None, [], stdout, stderr)
 
 def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
     """
@@ -454,7 +450,7 @@ def _get_example_result(example: Example,
         err_stream.write("An exception occured trying to run or validate the example {}.".format(example.name()))
         traceback.print_exc(file=err_stream)
         logging.error(err_stream.getvalue())
-        return report.ReportRecord(example.name(), report.Result.ERROR, None, [], err_stream.getvalue())
+        return report.ReportRecord(example.name(), report.Result.ERROR, None, [], stderr=err_stream.getvalue())
 
 def run_examples(examples: Iterable[Example],
                  whitelist: Optional[List[str]],

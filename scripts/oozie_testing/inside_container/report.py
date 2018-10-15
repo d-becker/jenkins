@@ -30,7 +30,8 @@ class ReportRecord:
                  result: Result,
                  oozie_job_id: Optional[str],
                  applications: List[str],
-                 message: Optional[str] = None) -> None:
+                 stdout: Optional[str] = None,
+                 stderr: Optional[str] = None) -> None:
         """
         Creates `ReportRecord` object.
 
@@ -39,7 +40,8 @@ class ReportRecord:
             result: The result of the Oozie job.
             oozie_job_id: The id of the Oozie job.
             applications: The id's of the yarn applications of the Oozie job.
-            message: Information about the run.
+            stdout: Optionally, the stdout of the run/validation process.
+            stderr: Optionally, the stderr of the run/validation process.
 
         """
 
@@ -47,4 +49,5 @@ class ReportRecord:
         self.result = result
         self.oozie_job_id = oozie_job_id
         self.applications = applications
-        self.message = message
+        self.stdout = stdout
+        self.stderr = stderr

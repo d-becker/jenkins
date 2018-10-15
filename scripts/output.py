@@ -122,14 +122,14 @@ def generate_report(report_records: List[report.ReportRecord],
             assert result == report.Result.SUCCEEDED
 
         # Aggregate the Yarn logs of the containers and add them to system-out and system-err elements.
-        (stdout, stderr) = printable_logs_for_oozie_job(record, report_and_log_dir)
+        (yarn_stdout, yarn_stderr) = printable_logs_for_oozie_job(record, report_and_log_dir)
         stdout_element = ET.SubElement(testcase, "system-out")
+        stdout_yarn_part = "\n\nYarn stdout:\n\n" + yarn_stdout
+        stdout_element.text = record.stdout + stdout_yarn_part if record.stdout is not None else stdout_yarn_part
 
-        stdout_element.text = ("Message:\n\n{}\n\nEnd of message".format(record.message) + stdout
-                               if record.message is not None
-                               else stdout)
         stderr_element = ET.SubElement(testcase, "system-err")
-        stderr_element.text = stderr
+        stderr_yarn_part = "\n\nYarn stderr:\n\n" + yarn_stderr
+        stderr_element.text = record.stderr + stderr_yarn_part if record.stderr is not None else stderr_yarn_part
 
         testsuite.append(testcase)
 
