@@ -86,7 +86,9 @@ def _launch_and_wait_for_oozie_job(command: List[str],
     applications = get_yarn_applications_of_job(launch_result)
     (oozie_logs, oozie_error_logs) = _get_oozie_logs(launch_result)
 
-    return report.ReportRecord(example_name, final_status, launch_result, applications, oozie_logs, oozie_error_logs)
+    return report.ReportRecord(example_name, final_status, launch_result, applications,
+                               stdout="Oozie logs:\n\n{}".format(oozie_logs),
+                               stderr="Oozie error logs:\n\n{}".format(oozie_error_logs))
 
 class Example(metaclass=ABCMeta):
     """
@@ -311,9 +313,7 @@ def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
 
 def _get_oozie_version() -> str:
     url = "http://localhost:11000/oozie/v2/admin/build-version"
-    response: str
-    with urllib.request.urlopen(url) as connection:
-        response = connection.read().decode()
+    response = _send_request(url)
 
     json_dict = json.loads(response)
     return json_dict["buildVersion"]
@@ -546,9 +546,7 @@ def get_yarn_applications_of_job(job_id: str) -> List[str]:
     """
 
     url = "http://localhost:11000/oozie/v1/job/{}?show=info".format(job_id)
-    response: str
-    with urllib.request.urlopen(url) as connection:
-        response = connection.read().decode()
+    response = _send_request(url)
 
     json_dict = json.loads(response)
     actions = json_dict.get("actions", [])
