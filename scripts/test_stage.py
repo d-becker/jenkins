@@ -89,7 +89,7 @@ def copy_logs(oozieserver_name: str,
               logfile: str,
               report_records_file: str) -> None:
     """
-    Copies the logfile and the file file containing the test results, as well as
+    Copies the logfile and the file containing the test results, as well as
     the Oozie and Yarn logs from the docker containers to the local file system.
 
     Args:

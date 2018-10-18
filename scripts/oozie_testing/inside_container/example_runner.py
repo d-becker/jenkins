@@ -23,7 +23,7 @@ import tempfile
 import time
 import traceback
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import urllib.request
 
@@ -37,6 +37,11 @@ else:
 
 # pylint: enable=useless-import-alias
 
+def _send_request(url: str) -> str:
+    with urllib.request.urlopen(url) as connection:
+        response = connection.read().decode()
+        return response
+    
 def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union[str, int]:
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -54,6 +59,15 @@ def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union
 
     return job_id
 
+def _get_oozie_logs(job_id: str) -> Tuple[str, str]:
+    url_logs = "http://localhost:11000/oozie/v1/job/{}?show=log".format(job_id)
+    logs = _send_request(url_logs)
+
+    url_error_logs = "http://localhost:11000/oozie/v2/job/{}?show=errorlog".format(job_id)
+    error_logs = _send_request(url_error_logs)
+
+    return (logs, error_logs)
+
 def _launch_and_wait_for_oozie_job(command: List[str],
                                    example_name: str,
                                    poll_time: int,
@@ -70,8 +84,9 @@ def _launch_and_wait_for_oozie_job(command: List[str],
 
     final_status = wait_for_job_to_finish(launch_result, example_name, poll_time, timeout)
     applications = get_yarn_applications_of_job(launch_result)
+    (oozie_logs, oozie_error_logs) = _get_oozie_logs(launch_result)
 
-    return report.ReportRecord(example_name, final_status, launch_result, applications)
+    return report.ReportRecord(example_name, final_status, launch_result, applications, oozie_logs, oozie_error_logs)
 
 class Example(metaclass=ABCMeta):
     """
