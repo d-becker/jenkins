@@ -17,7 +17,7 @@ import oozie_testing.inside_container.report as report
 
 # pylint: enable=useless-import-alias
 
-def get_logs_for_yarn_application(application_id: str, report_and_log_dir: Path) -> Dict[str, Tuple[str, str]]:
+def _get_logs_for_yarn_application(application_id: str, report_and_log_dir: Path) -> Dict[str, Tuple[str, str]]:
     """
     Returns the logs for the given yarn application. The returned object is a dict, where the keys are the names of the
     containers corresponding to the yarn application and the values are tuples the first elements of which are the
@@ -57,7 +57,7 @@ def get_logs_for_yarn_application(application_id: str, report_and_log_dir: Path)
 
     return res
 
-def printable_logs_for_oozie_job(record: report.ReportRecord, report_and_log_dir: Path) -> Tuple[str, str]:
+def _printable_logs_for_oozie_job(record: report.ReportRecord, report_and_log_dir: Path) -> Tuple[str, str]:
     """
     Returns a pair of strings, the first element of which is the aggregated stdout output of all containers
     and applications corresponding to the given Oozie job, the second is the stderr output.
@@ -81,7 +81,7 @@ def printable_logs_for_oozie_job(record: report.ReportRecord, report_and_log_dir
         stdout.write(application_header)
         stderr.write(application_header)
 
-        container_logs = get_logs_for_yarn_application(application_id, report_and_log_dir / "nodemanager")
+        container_logs = _get_logs_for_yarn_application(application_id, report_and_log_dir / "nodemanager")
         for (container_id, (out, err)) in container_logs.items():
             container_header = "**{}**\n\n".format(container_id)
             stdout.write(container_header + out + "\n\n")
@@ -122,7 +122,7 @@ def generate_report(report_records: List[report.ReportRecord],
             assert result == report.Result.SUCCEEDED
 
         # Aggregate the Yarn logs of the containers and add them to system-out and system-err elements.
-        (yarn_stdout, yarn_stderr) = printable_logs_for_oozie_job(record, report_and_log_dir)
+        (yarn_stdout, yarn_stderr) = _printable_logs_for_oozie_job(record, report_and_log_dir)
         stdout_element = ET.SubElement(testcase, "system-out")
         stdout_yarn_part = "\n\nYarn stdout:\n\n" + yarn_stdout
         stdout_element.text = record.stdout + stdout_yarn_part if record.stdout is not None else stdout_yarn_part
