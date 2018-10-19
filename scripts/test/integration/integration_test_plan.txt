@@ -1,0 +1,14 @@
+Docker
+
+ - test docker copy with a container and dummy files in both directions
+ - test finding the Oozie server and the Node manager among the running containers - use a dummy cluster
+ - test `docker-compose up` and `docker-compose down` with dummy clusters
+ - test the Oozie-testing related functions with dummy clusters
+ - also test error conditions, exceptions etc.
+
+Oozie
+
+ - test job launching (normal and fluent)
+ - test fluent job building (compilation and jar packaging) with dummy source files
+ - test fluent job job.properties generation
+ - also test error conditions
