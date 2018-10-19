@@ -269,9 +269,9 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
         """
 
         with job_properties_file.open("w") as file:
-            options = ["queueName=default", "examplesRoot=examples", "projectVersion={}".format(oozie_version)]
-            options.extend(options)
-            file.write("\n".join(options))
+            job_options = ["queueName=default", "examplesRoot=examples", "projectVersion={}".format(oozie_version)]
+            job_options.extend(options)
+            file.write("\n".join(job_options))
 
 # pylint: enable=abstract-method
 
