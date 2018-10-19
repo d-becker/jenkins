@@ -13,6 +13,34 @@ import docker
 
 import oozie_testing.inside_container
 
+class DockerSubprocessException(Exception):
+    """
+    An exception that is thrown when subprocesses related to Docker fail.
+    """
+
+    def __init__(self,
+                 message: str,
+                 process_result: subprocess.CompletedProcess) -> None:
+        """
+        Creates a `DockerSubprocessException`.
+
+        Args:
+            message: A user-defined message - it can be used to describe the concrete situation.
+            process_result: The `subprocess.CompletedProcess` object returned by the process running function.
+
+        """
+
+        self.message = message
+        self.returncode = process_result.returncode
+        self.stdout = process_result.stdout
+        self.stderr = process_result.stderr
+
+        exception_message = "{}\nReturn code:\n{}\nStdout:\n{}\nStderr:\n{}".format(self.message,
+                                                                                    self.returncode,
+                                                                                    self.stdout,
+                                                                                    self.stderr)
+        super().__init__(exception_message)
+
 def _get_first_container_of_service(service_name: str) -> docker.models.containers.Container:
     docker_client = docker.from_env()
 
@@ -53,7 +81,11 @@ def docker_compose_up(directory: Path) -> None:
 
     logging.info("Starting the dockerised cluster.")
     command_up = ["docker-compose", "up", "-d"]
-    subprocess.run(command_up, cwd=directory.expanduser().resolve(), check=True)
+    process_result = subprocess.run(command_up, cwd=directory.expanduser().resolve(),
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if process_result.returncode != 0:
+        raise DockerSubprocessException("Error: `docker-compose up` failed.", process_result)
 
 def docker_compose_down(directory: Path) -> None:
     """
@@ -67,7 +99,11 @@ def docker_compose_down(directory: Path) -> None:
 
     logging.info("Stopping the dockerised cluster.")
     command_down = ["docker-compose", "down"]
-    subprocess.run(command_down, cwd=directory, check=True)
+    process_result = subprocess.run(command_down, cwd=directory.expanduser().resolve(),
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if process_result.returncode != 0:
+        raise DockerSubprocessException("Error: `docker-compose down` failed.", process_result)
 
 def docker_cp_to_container(container_name: str, source: str, dest: str) -> None:
     """
@@ -81,7 +117,10 @@ def docker_cp_to_container(container_name: str, source: str, dest: str) -> None:
     """
 
     command = ["docker", "cp", source, "{}:{}".format(container_name, dest)]
-    subprocess.run(command, check=True)
+    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if process_result.returncode != 0:
+        raise DockerSubprocessException("Error: docker copy to container failed.", process_result)
 
 def docker_cp_from_container(container_name: str, source: str, dest: str) -> None:
     """
@@ -95,7 +134,10 @@ def docker_cp_from_container(container_name: str, source: str, dest: str) -> Non
     """
 
     command = ["docker", "cp", "{}:{}".format(container_name, source), dest]
-    subprocess.run(command, check=True)
+    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if process_result.returncode != 0:
+        raise DockerSubprocessException("Error: docker copy from container failed.", process_result)
 
 def copy_test_script_files_to_container(oozieserver_name: str) -> None:
     """

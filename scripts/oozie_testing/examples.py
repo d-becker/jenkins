@@ -46,7 +46,6 @@ def run_oozie_examples_with_dbd(oozieserver: docker.models.containers.Container,
         The exit code of the process running the test, which is 1 if any tests failed.
 
     """
-    logging.warning("Validate list: {}.".format(validate)) # TODO: Delete
     cmd_base = "python3 /opt/oozie/inside_container/example_runner.py --logfile {} --report {}".format(logfile,
                                                                                                        report_file)
 

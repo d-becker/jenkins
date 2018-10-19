@@ -156,7 +156,6 @@ def perform_testing(args: argparse.Namespace,
     examples_logfile = "example_runner.log"
     examples_report_records_file = "report_records.pickle"
 
-    logging.warning("Validate list from test_stage: {}.".format(args.validate)) # TODO: Delete
     exit_code_examples = oozie_testing.examples.run_oozie_examples_with_dbd(oozieserver,
                                                                             examples_logfile,
                                                                             examples_report_records_file,
