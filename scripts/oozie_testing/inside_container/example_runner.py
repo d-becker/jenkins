@@ -37,11 +37,30 @@ else:
 
 # pylint: enable=useless-import-alias
 
+class OozieSubprocessResult:
+    def __init__(self, message: str, returncode: int, stdout: str, stderr: str) -> None:
+        self.message = message
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+    @staticmethod
+    def from_process_result(message: str,
+                            process_result: subprocess.CompletedProcess) -> "OozieSubprocessResult":
+        return OozieSubprocessResult(message, process_result.returncode, process_result.stdout, process_result.stderr)
+
+    def to_string(self) -> str:
+        message_template = "Oozie subprocess failed. Message: {}\nReturn code: {}\nStdout:\n{}\nStderr:\n{}"
+        return message_template.format(self.message,
+                                       self.returncode,
+                                       self.stdout,
+                                       self.stderr)
+
 def _send_request(url: str) -> str:
     with urllib.request.urlopen(url) as connection:
         response = connection.read().decode()
         return response
-    
+
 def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union[str, int]:
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -195,7 +214,7 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
 
         return self._class_name
 
-    def build_example(self, tmp: str) -> Path:
+    def build_example(self, tmp: str) -> Union[Path, OozieSubprocessResult]:
         """
         Builds the fluent example in the provided (temporary) directory -
         compiles the java source file and packages it in a jar.
@@ -204,7 +223,7 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
             tmp: The directory where the output of the build should be.
 
         Returns:
-            The path to the produced jar file.
+            The path to the produced jar file if building it was successful; an `OozieSubprocessResult` otherwise.
 
         """
 
@@ -216,7 +235,10 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
                        str(path_to_source_file),
                        "-d", tmp]
         logging.info("Building fluent job example with command: %s", cmd_compile)
-        subprocess.run(cmd_compile, check=True)
+        build_process_result = subprocess.run(cmd_compile, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if build_process_result.returncode != 0:
+            return OozieSubprocessResult.from_process_result("Failed to build fluent job {}.".format(self.name()),
+                                                             build_process_result)
 
         tmp_path = Path(tmp)
         jar_path = tmp_path / "fluent_{}.jar".format(self.class_name)
@@ -227,7 +249,11 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
                    str(path_to_class_file)]
 
         logging.info("Creating fluent job jar file with command: %s", cmd_jar)
-        subprocess.run(cmd_jar, check=True)
+        jar_process_result = subprocess.run(cmd_jar, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if jar_process_result.returncode != 0:
+            return OozieSubprocessResult.from_process_result(
+                "Failed to create jar file for fluent job {}.".format(self.name()),
+                jar_process_result)
 
         return jar_path
 
@@ -259,7 +285,11 @@ class FluentExample(FluentExampleBase):
                poll_time: int,
                timeout: int) -> report.ReportRecord:
         with tempfile.TemporaryDirectory() as tmp:
-            jar_path = self.build_example(tmp)
+            jar_path: Union[Path, OozieSubprocessResult] = self.build_example(tmp)
+            if isinstance(jar_path, OozieSubprocessResult):
+                # TODO: Separate stdout and stderr.
+                return report.ReportRecord(self.name(), report.Result.ERROR, None, [], stderr=jar_path.to_string())
+
             job_properties_file = Path(tmp) / "job.properties"
             self.create_job_properties(job_properties_file, cli_options, self._oozie_version)
 
@@ -277,7 +307,10 @@ class FluentExampleValidateOnly(FluentExampleBase):
                _poll_time: int,
                _timeout: int) -> report.ReportRecord:
         with tempfile.TemporaryDirectory() as tmp:
-            jar_path = self.build_example(tmp)
+            jar_path: Union[Path, OozieSubprocessResult] = self.build_example(tmp)
+            if isinstance(jar_path, OozieSubprocessResult):
+                # TODO: Separate stdout and stderr.
+                return report.ReportRecord(self.name(), report.Result.ERROR, None, [], stderr=jar_path.to_string())
 
             command = ["/opt/oozie/bin/oozie", "job", "-validatejar", str(jar_path)]
 
@@ -388,7 +421,7 @@ def get_workflow_example_dirs(example_dir: Path) -> Iterable[Path]:
 
     return filter(condition, get_all_example_dirs(example_dir))
 
-def query_job(job_id: str) -> str:
+def query_job(job_id: str) -> Union[str, OozieSubprocessResult]:
     """
     Queries and returns the status of an Oozie job.
 
@@ -396,7 +429,8 @@ def query_job(job_id: str) -> str:
         job_id: The job_id of the Oozie job.
 
     Returns:
-        The status of the Oozie job with the given job_id.
+        The status of the Oozie job with the given job_id as a string if the query was successful;
+        otherwise returns an `OozieSubprocessResult`.
 
     """
 
@@ -405,7 +439,11 @@ def query_job(job_id: str) -> str:
                      "-info",
                      job_id]
 
-    query_process_result = subprocess.run(query_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    query_process_result = subprocess.run(query_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if query_process_result.returncode != 0:
+        return OozieSubprocessResult.from_process_result("Failed to query oozie job {}.".format(job_id),
+                                                         query_process_result)
+
     query_output = query_process_result.stdout.decode()
 
     match = re.search("Status.*:(.*)\n", query_output)
@@ -454,7 +492,10 @@ def wait_for_job_to_finish(job_id: str, name: str, poll_time: int = 1, timeout: 
 
     start_time = time.time()
 
-    status = query_job(job_id)
+    status: Union[str, OozieSubprocessResult] = query_job(job_id)
+    if isinstance(status, OozieSubprocessResult):
+        logging.warning(status.to_string())
+
     while status == "RUNNING" and (time.time() - start_time) < timeout:
         time.sleep(poll_time)
         status = query_job(job_id)
