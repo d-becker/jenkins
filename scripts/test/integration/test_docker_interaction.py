@@ -16,10 +16,10 @@ import unittest
 
 import docker
 
+import docker_setup
+
 # We add the project root to the path to be able to access the project modules.
 sys.path.append(str(Path("../..").resolve()))
-
-import docker_setup
 
 import test_env
 
