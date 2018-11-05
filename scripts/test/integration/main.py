@@ -60,5 +60,9 @@ if __name__ == '__main__':
     discovered = unittest.TestLoader().discover(str(this_directory))
 
     tests = filter_tests(iterate_tests(discovered), args.tests)
+
+    # print("All discovered:", list(iterate_tests(discovered))) # TODO
+    # print("Filtered:",list(tests)) # TODO
+    
     suite = unittest.TestSuite(tests)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

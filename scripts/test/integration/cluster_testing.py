@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
+
 import unittest
 
 import test_env
 
 class TestWithCluster(unittest.TestCase):
     reports_dir = Path("testing/reports")
-    timeout = args.timeout if args.timeout is not None else 180
+    timeout = 180
     build_config_dir = Path("docker_compose_resources")
 
     @classmethod
@@ -21,7 +23,11 @@ class TestWithCluster(unittest.TestCase):
         # TODO: Assert examples are extracted and uploaded
 
     @classmethod
-    def tearDownClass() -> None:
+    def tearDownClass(cls) -> None:
         test_env.docker_compose_down(TestWithCluster.build_config_dir)
+
+    def test_cluster() -> None:
+        import os
+        print("Dummy test case. Cwd: {}.".format(os.getcwd()))
 
         

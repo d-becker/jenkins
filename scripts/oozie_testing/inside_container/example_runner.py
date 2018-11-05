@@ -28,11 +28,10 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import urllib.request
 
 # pylint: disable=useless-import-alias
-
-if __name__ == "__main__":
-    # We are running the script inside the container.
+try:
+    # Depending on where this script is run or imported as a module, the `report` module may be in different places.
     import report
-else:
+except ModuleNotFoundError:
     import oozie_testing.inside_container.report as report
 
 # pylint: enable=useless-import-alias
@@ -344,7 +343,7 @@ def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
 
     return map(NormalExample, get_all_example_dirs(example_apps_dir))
 
-def _get_oozie_version() -> str:
+def get_oozie_version() -> str:
     url = "http://localhost:11000/oozie/v2/admin/build-version"
     response = _send_request(url)
 
@@ -365,7 +364,7 @@ def get_all_fluent_examples(example_dir: Path, validate_only: List[str]) -> Iter
 
     """
 
-    oozie_version = _get_oozie_version()
+    oozie_version = get_oozie_version()
     lib = example_dir.expanduser().resolve().parent / "lib"
     oozie_fluent_job_api_jar = lib / "oozie-fluent-job-api-{}.jar".format(oozie_version)
 
