@@ -151,7 +151,8 @@ def perform_testing(args: argparse.Namespace,
     """
 
     oozieserver = test_env.get_oozieserver()
-    test_env.setup_testing_env_in_container(oozieserver)
+    inside_container = Path(oozie_testing.inside_container.__file__).parent.expanduser().resolve()
+    test_env.setup_testing_env_in_container(oozieserver, inside_container)
 
     examples_logfile = "example_runner.log"
     examples_report_records_file = "report_records.pickle"

@@ -19,6 +19,7 @@ import docker
 import docker_setup
 
 # We add the project root to the path to be able to access the project modules.
+# TODO: Try to solve it differently.
 sys.path.append(str(Path("../..").resolve()))
 
 import test_env

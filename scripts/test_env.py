@@ -139,16 +139,18 @@ def docker_cp_from_container(container_name: str, source: str, dest: str) -> Non
     if process_result.returncode != 0:
         raise DockerSubprocessException("Error: docker copy from container failed.", process_result)
 
-def copy_test_script_files_to_container(oozieserver_name: str) -> None:
+def copy_test_script_files_to_container(oozieserver_name: str, inside_container: Path) -> None:
     """
     Copies the script files that will be run within the container to test Oozie.
 
     Args:
         oozieserver_name: The name of the Oozie server container, to which the scripts will be copied.
+        inside_container: The path on the local file system where the files 
+            that should be copied to the Oozie server container are located.
 
     """
 
-    inside_container = Path(oozie_testing.inside_container.__file__).parent.expanduser().resolve()
+
 
     logging.info("Copying files to the container.")
     docker_cp_to_container(oozieserver_name, str(inside_container), "/opt/oozie/")
@@ -167,17 +169,18 @@ def upload_examples_to_hdfs(oozieserver: docker.models.containers.Container) -> 
                                         workdir="/opt/oozie")
     logging.info("Uploading the tests finished with exit code: %s.", errcode)
 
-def setup_testing_env_in_container(oozieserver: docker.models.containers.Container) -> None:
+def setup_testing_env_in_container(oozieserver: docker.models.containers.Container, inside_container: Path) -> None:
     """
     Prepares the Oozie server for running the examples by copying the necessary
     scripts to the Oozie server container and uploading the examples to HDFS.
 
     Args:
         oozieserver: The object representing the Oozie server.
-
+        inside_container: The path on the local file system where the files 
+            that should be copied to the Oozie server container are located.
     """
 
-    copy_test_script_files_to_container(oozieserver.name)
+    copy_test_script_files_to_container(oozieserver.name, inside_container)
     upload_examples_to_hdfs(oozieserver)
 
 def copy_oozie_logs(oozieserver_name: str, output: Path) -> None:
