@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+This module contains functions that can be used to set up the docker environment for integration testing.
+"""
+
 import errno
 import logging
 import subprocess
@@ -8,13 +12,11 @@ import time
 
 from typing import List
 
-import docker
-
 def _is_command_available(command: str) -> bool:
     try:
         subprocess.run([command], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
+    except OSError as error:
+        if error.errno == errno.ENOENT:
             return False
 
         raise
@@ -22,18 +24,45 @@ def _is_command_available(command: str) -> bool:
     return True
 
 def is_docker_command_available() -> bool:
+    """
+    Checks whether the `docker` command is available on the machine.
+
+    Returns:
+        True if the `docker` command is available on the machine; false otherwise.
+
+    """
+
     return _is_command_available("docker")
 
 def is_docker_compose_command_available() -> bool:
+    """
+    Checks whether the `docker-compose` command is available on the machine.
+
+    Returns:
+        True if the `docker-compose` command is available on the machine; false otherwise.
+
+    """
+
     return _is_command_available("docker-compose")
-    
+
 def is_docker_daemon_running() -> bool:
+    """
+    Checks whether the docker daemon is running.
+
+    Returns:
+        True if the docker daemon is running; false otherwise.
+
+    """
+
     command = ["docker", "version"]
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     return process_result.returncode == 0
 
 class DockerError(Exception):
+    """
+    An exception used in the integration tests for problems concerning Docker.
+    """
     pass
 
 def _wait_for_docker_daemon_to_start(timeout: int) -> None:
@@ -51,6 +80,15 @@ def _wait_for_docker_daemon_to_start(timeout: int) -> None:
     logging.info("Docker daemon is running.")
 
 def start_docker_daemon() -> None:
+    """
+    Starts the docker daemon.
+
+    Raises:
+        DockerError: Raised if this function is called on an unsupported
+            operating system. Only Linux and MacOS are supported.
+
+    """
+
     logging.info("Starting docker daemon.")
 
     command: List[str]
@@ -79,6 +117,15 @@ def start_docker_daemon() -> None:
     _wait_for_docker_daemon_to_start(120)
 
 def ensure_docker_daemon_running() -> None:
+    """
+    Ensures that the docker daemon is running, starting it if it is not.
+
+    Raises:
+        DockerError: Raised if this function is called on an unsupported
+            operating system. Only Linux and MacOS are supported.
+
+    """
+
     if is_docker_daemon_running():
         logging.info("Docker daemon is running.")
         return
@@ -89,4 +136,3 @@ def ensure_docker_daemon_running() -> None:
         raise DockerError(msg)
 
     start_docker_daemon()
-   

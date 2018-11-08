@@ -32,11 +32,16 @@ try:
     # Depending on where this script is run or imported as a module, the `report` module may be in different places.
     import report
 except ModuleNotFoundError:
-    import oozie_testing.inside_container.report as report
+    # We suppress the mypy warning because if execution reaches this point, the name `report` is not defined.
+    import oozie_testing.inside_container.report as report # type: ignore
 
 # pylint: enable=useless-import-alias
 
 class OozieSubprocessResult:
+    """
+    A class that stores information about the result of an Oozie subprocess.
+    """
+
     def __init__(self, message: str, returncode: int, stdout: str, stderr: str) -> None:
         self.message = message
         self.returncode = returncode
@@ -46,9 +51,25 @@ class OozieSubprocessResult:
     @staticmethod
     def from_process_result(message: str,
                             process_result: subprocess.CompletedProcess) -> "OozieSubprocessResult":
+        """
+        Creates an `OozieSubprocessResult` object from a message and a `subprocess.CompletedProcess` object.
+
+        Args:
+            message: A message providing information about the result.
+            process_result: a `subprocess.CompletedProcess` object.
+
+        Returns:
+            An `OozieSubprocessResult` object.
+
+        """
+
         return OozieSubprocessResult(message, process_result.returncode, process_result.stdout, process_result.stderr)
 
     def to_string(self) -> str:
+        """
+        Returns a string represeting this `OozieSubprocessResult` object.
+        """
+
         message_template = "Oozie subprocess failed. Message: {}\nReturn code: {}\nStdout:\n{}\nStderr:\n{}"
         return message_template.format(self.message,
                                        self.returncode,
@@ -286,8 +307,12 @@ class FluentExample(FluentExampleBase):
         with tempfile.TemporaryDirectory() as tmp:
             jar_path: Union[Path, OozieSubprocessResult] = self.build_example(tmp)
             if isinstance(jar_path, OozieSubprocessResult):
-                # TODO: Separate stdout and stderr.
-                return report.ReportRecord(self.name(), report.Result.ERROR, None, [], stderr=jar_path.to_string())
+                return report.ReportRecord(self.name(),
+                                           report.Result.ERROR,
+                                           None,
+                                           [],
+                                           stdout=jar_path.stdout,
+                                           stderr=jar_path.stderr)
 
             job_properties_file = Path(tmp) / "job.properties"
             self.create_job_properties(job_properties_file, cli_options, self._oozie_version)
@@ -308,8 +333,11 @@ class FluentExampleValidateOnly(FluentExampleBase):
         with tempfile.TemporaryDirectory() as tmp:
             jar_path: Union[Path, OozieSubprocessResult] = self.build_example(tmp)
             if isinstance(jar_path, OozieSubprocessResult):
-                # TODO: Separate stdout and stderr.
-                return report.ReportRecord(self.name(), report.Result.ERROR, None, [], stderr=jar_path.to_string())
+                return report.ReportRecord(self.name(),
+                                           report.Result.ERROR, None,
+                                           [],
+                                           stdout=jar_path.stdout,
+                                           stderr=jar_path.to_string())
 
             command = ["/opt/oozie/bin/oozie", "job", "-validatejar", str(jar_path)]
 
@@ -344,6 +372,14 @@ def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
     return map(NormalExample, get_all_example_dirs(example_apps_dir))
 
 def get_oozie_version() -> str:
+    """
+    Queries the Oozie server running on localhost and returns the Oozie version.
+
+    Returns:
+        The Oozie version.
+
+    """
+
     url = "http://localhost:11000/oozie/v2/admin/build-version"
     response = _send_request(url)
 

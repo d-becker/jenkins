@@ -1,26 +1,14 @@
 #!/usr/bin/env python3
 
-import errno
-import logging
+# pylint: disable=missing-docstring
 
 from pathlib import Path
 
-import subprocess
-import sys
 import tempfile
-import time
-
-from typing import List
 
 import unittest
 
 import docker
-
-import docker_setup
-
-# We add the project root to the path to be able to access the project modules.
-# TODO: Try to solve it differently.
-sys.path.append(str(Path("../..").resolve()))
 
 import test_env
 
@@ -32,11 +20,11 @@ def _write_to_file(file_path: Path, text: str) -> None:
 
 class TestDockerCopying(unittest.TestCase):
     def setUp(self) -> None:
-        self.container = docker.from_env().containers.run(IMAGE, detach=True, auto_remove=True, tty=True);
+        self.container = docker.from_env().containers.run(IMAGE, detach=True, auto_remove=True, tty=True)
 
     def tearDown(self) -> None:
         self.container.remove(force=True)
-        
+
     def test_docker_copy_to_container_ok(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir_name:
             tempdir = Path(tempdir_name).expanduser().resolve()
@@ -50,7 +38,7 @@ class TestDockerCopying(unittest.TestCase):
             test_env.docker_cp_to_container(self.container.name, tempdir_name, dir_in_container)
 
             output = list(sorted(self.container.exec_run("ls {}".format(dir_in_container))
-                                            .output.decode().strip().split("\n")))
+                                 .output.decode().strip().split("\n")))
             expected = list(sorted([file1.name, file2.name]))
             self.assertEqual(expected, output)
 
@@ -77,9 +65,9 @@ class TestDockerCopying(unittest.TestCase):
 
     def test_docker_copy_from_container_ok(self) -> None:
         command_in_container = "mkdir temp_dir && touch temp_dir/file1.txt && touch temp_dir/file2.txt"
-        file_creation_result = self.container.exec_run('sh -c "{}"'.format(command_in_container))        
+        file_creation_result = self.container.exec_run('sh -c "{}"'.format(command_in_container))
         self.assertEqual(0, file_creation_result.exit_code)
- 
+
         with tempfile.TemporaryDirectory() as local_tempdir_name:
             test_env.docker_cp_from_container(self.container.name, "temp_dir", local_tempdir_name)
 
@@ -101,18 +89,17 @@ class TestDockerCopying(unittest.TestCase):
             self.assertFalse(nonexistent_destination.exists())
 
             self.container.exec_run('sh -c "touch dummy_file.txt"')
-            
 
             with self.assertRaises(test_env.DockerSubprocessException):
-                test_env.docker_cp_from_container(self.container.name, "dummy_file.txt", nonexistent_destination)
+                test_env.docker_cp_from_container(self.container.name, "dummy_file.txt", str(nonexistent_destination))
 
 class TestDockerFindingContainers(unittest.TestCase):
     def test_find_oozie_and_nodemanager(self) -> None:
         try:
             oozieserver = docker.from_env().containers.run(IMAGE, detach=True, auto_remove=True,
-                                                           tty=True, name="oozieserver");
+                                                           tty=True, name="oozieserver")
             nodemanager = docker.from_env().containers.run(IMAGE, detach=True, auto_remove=True,
-                                                           tty=True, name="nodemanager");
+                                                           tty=True, name="nodemanager")
 
             found_oozieserver = test_env.get_oozieserver()
             found_nodemanager = test_env.get_nodemanager()
@@ -147,7 +134,7 @@ services:
                 test_env.docker_compose_up(tempdir)
 
                 container_names = list(map(lambda container: container.name, docker.from_env().containers.list()))
-                
+
                 self.assertTrue(first_service_name in container_names)
                 self.assertTrue(second_service_name in container_names)
             finally:
@@ -168,6 +155,4 @@ services:
             tempdir = Path(tempdir_name).expanduser().resolve()
 
             with self.assertRaises(test_env.DockerSubprocessException):
-                test_env.docker_compose_down(tempdir) 
-
-                
+                test_env.docker_compose_down(tempdir)

@@ -11,8 +11,6 @@ import subprocess
 
 import docker
 
-import oozie_testing.inside_container
-
 class DockerSubprocessException(Exception):
     """
     An exception that is thrown when subprocesses related to Docker fail.
@@ -145,7 +143,7 @@ def copy_test_script_files_to_container(oozieserver_name: str, inside_container:
 
     Args:
         oozieserver_name: The name of the Oozie server container, to which the scripts will be copied.
-        inside_container: The path on the local file system where the files 
+        inside_container: The path on the local file system where the files
             that should be copied to the Oozie server container are located.
 
     """
@@ -176,7 +174,7 @@ def setup_testing_env_in_container(oozieserver: docker.models.containers.Contain
 
     Args:
         oozieserver: The object representing the Oozie server.
-        inside_container: The path on the local file system where the files 
+        inside_container: The path on the local file system where the files
             that should be copied to the Oozie server container are located.
     """
 

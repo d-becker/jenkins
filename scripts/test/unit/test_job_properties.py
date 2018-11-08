@@ -1,11 +1,12 @@
+#!/usr/bin/env python3
+
+# pylint: disable=missing-docstring
+
 from pathlib import Path
 
 import tempfile
 
-from typing import Dict, List, Tuple
-
 import unittest
-import xml.etree.ElementTree as ET
 
 import oozie_testing.inside_container.example_runner
 
@@ -29,5 +30,8 @@ option2=B"""
                 job_properties_file,
                 options,
                 oozie_version)
-            result = job_properties_file.open().read()
+
+            with job_properties_file.open() as file:
+                result = file.read()
+
             self.assertEqual(expected_result, result)
