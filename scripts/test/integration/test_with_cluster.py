@@ -88,6 +88,14 @@ class TestWithCluster(unittest.TestCase):
         (return_code, output) = TestWithCluster.oozieserver.exec_run(cmd, workdir="/opt/oozie")
         self.assertNotEqual(0, return_code)
 
+    def test_launching_fluent_example_ok(self) -> None:
+        # TODO: Fix this test.
+        example_class_name = "JavaMain"
+        cmd = "python3 /opt/oozie/inside_container/within_cluster_testing.py --run-fluent {}".format(example_class_name)
+
+        (return_code, output) = TestWithCluster.oozieserver.exec_run(cmd, workdir="/opt/oozie")
+        self.assertEqual(0, return_code)
+
     @staticmethod
     def _check_cluster_running() -> None:
         docker_client = docker.from_env()
