@@ -7,10 +7,12 @@ pipeline {
 
     parameters {
         string(defaultValue: 'master',
-            description: 'Oozie branch',
+            description: 'Oozie branch, tag or commit. In the Oozie repository, this reference will be checked out ' +
+                         'before building and testing.',
             name: 'oozie_branch')
         string(defaultValue: 'configuration',
-            description: 'BuildConfiguration files to build.',
+            description: 'A directory within the test repository (not the Oozie repository) ' +
+	                 'that contains dbd BuildConfiguration files. Each BuildConfiguration is built and tested.',
             name: 'configuration_files')
         string(defaultValue: 'map-reduce Fluent_JavaMain',
             description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
