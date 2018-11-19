@@ -19,7 +19,8 @@ function wait_for_oozie {
     # while ! jps | grep -q EmbeddedOozieServer
     # while ! jps | grep -q -i Oozie
     # while ! bin/oozie admin -status
-    while ! jps | grep -E -q 'EmbeddedOozieServer|Bootstrap' # EmbeddedOozieServer for newer versions, Bootstrap for 4.3.0.
+    # while ! jps | grep -E -q 'EmbeddedOozieServer|Bootstrap' # EmbeddedOozieServer for newer versions, Bootstrap for 4.3.0.
+    while ! curl "http://localhost:11000/oozie/v2/admin/build-version" # Wait until the Oozie REST API is responsive.
     do
         sleep 0.5
     done
