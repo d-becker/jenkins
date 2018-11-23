@@ -37,7 +37,7 @@ def build_configs_with_dbd(configurations_dir: Path,
 
     for configuration in build_config_files:
         logging.info("Building configuration with filename %s.", str(configuration))
-        command = [str(dbd_path), str(configuration), str(output_dir), "-c", str(cache)]
+        command = ["python3", str(dbd_path), str(configuration), str(output_dir), "-c", str(cache)]
         subprocess.run(command, check=True)
 
 def _filter_paths(file_path: Path, configuration_files: Optional[List[str]]) -> bool:
