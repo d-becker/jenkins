@@ -226,7 +226,7 @@ def main() -> None:
     configurations_dir = Path(args.configurations_dir)
     output_dir = Path(args.output_dir)
     reports_dir = Path("testing/reports")
-    dbd_path = Path("testing/dbd/dbd/dbd.py")
+    dbd_path = Path("testing/dbd/run_dbd.py")
     cache_dir = Path("./dbd_cache")
     timeout = args.timeout if args.timeout is not None else 180
 
