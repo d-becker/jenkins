@@ -1,0 +1,8 @@
+name: oozie_upstream_hadoop276
+components:
+  hadoop:
+   release: 2.7.6
+#    snapshot: ~/hadoop-2.6.0
+  oozie:
+   snapshot: symlink_to_oozie_distro
+#    release: 5.0.0
