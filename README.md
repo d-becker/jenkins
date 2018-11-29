@@ -33,9 +33,10 @@ docker run \
 	jenkinsci/blueocean
 ```
 
-This will download the docker image `jenkinsci/blueocean` and run it. We will use a volume named `jenkins-data` to
-persist the configuration of the Jenkins server. If you later forget your username or password and want to configure a
-completely new server, delete that volume:
+This will download the docker image `jenkinsci/blueocean` (if you don't already have it) and run it. We will use a
+volume named `jenkins-data` to persist the configuration of the Jenkins server. Later when you start the server, you can
+use the same command. If you forget your username or password and want to configure a completely new server, delete the
+volume:
 
 ```
 docker volume rm jenkins-data
