@@ -8,12 +8,12 @@ This repository contains a Jenkins job that runs integration tests on Oozie usin
 This section describes how to set up a Jenkins job to test Oozie.
 
 ### Setting up the Jenkins job
-1. Clone this repository. You can use this respository directly without cloning it if you do not want to change the test
+1. Fork this repository. You can use this respository directly without forking it if you do not want to change the test
    configurations, but for example to set the versions of the components to use, you will need to modify or add new
    files to the `configurations` directory.
 1. On the Jenkins WebUI, click `New Item`. Enter a name for the project and select `Multibranch Pipeline` from the
    list. Click OK to go to the next step.
-1. On the next screen, go to `Branch Sources`, click `Add source` and select `Git`. Copy the URL of your clone of this
+1. On the next screen, go to `Branch Sources`, click `Add source` and select `Git`. Copy the URL of your fork of this
    repository to the `Project Repository` field. Save the configuration.
 
 ### Running the tests
