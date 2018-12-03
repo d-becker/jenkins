@@ -106,7 +106,8 @@ def copy_logs(oozieserver_name: str,
     test_env.copy_oozie_logs(oozieserver_name, current_report_dir / "oozieserver")
     test_env.copy_yarn_logs(nodemanager_name, current_report_dir / "nodemanager")
 
-def write_report(current_report_dir: Path,
+def write_report(build_config_name: str,
+                 current_report_dir: Path,
                  report_records_file: str) -> None:
     """
     Generates and writes a junit style xml report file.
@@ -124,7 +125,7 @@ def write_report(current_report_dir: Path,
 
         local_report_records_file.unlink()
 
-        xml_report = output.generate_report(report_records, current_report_dir)
+        xml_report = output.generate_report(build_config_name, report_records, current_report_dir)
         xml_report_file = current_report_dir / "report_examples.xml"
         xml_report.write(str(xml_report_file))
 
@@ -171,7 +172,7 @@ def perform_testing(args: argparse.Namespace,
 
     copy_logs(oozieserver.name, nodemanager.name, current_report_dir, examples_logfile, examples_report_records_file)
 
-    write_report(current_report_dir, examples_report_records_file)
+    write_report(build_config_name, current_report_dir, examples_report_records_file)
 
     return exit_code_examples
 

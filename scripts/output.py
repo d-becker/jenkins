@@ -89,12 +89,14 @@ def _printable_logs_for_oozie_job(record: report.ReportRecord, report_and_log_di
 
     return (stdout.getvalue(), stderr.getvalue())
 
-def generate_report(report_records: List[report.ReportRecord],
+def generate_report(testsuite_name: str,
+                    report_records: List[report.ReportRecord],
                     report_and_log_dir: Path) -> ET.ElementTree:
     """
     Generates a junit style xml from the test results.
 
     Args:
+        testsuite_name: The name of the test suite.
         report_records: A list of `ReportRecord` objects describing the results of the tests.
         report_and_log_dir: The directory on the local file system where the yarn logs are located.
 
@@ -106,7 +108,7 @@ def generate_report(report_records: List[report.ReportRecord],
     testsuite = ET.Element("testsuite", attrib={"tests" : str(len(report_records))})
 
     for record in report_records:
-        testcase = ET.Element("testcase", attrib={"classname" : "OozieExamples", "name" : record.name})
+        testcase = ET.Element("testcase", attrib={"classname" : testsuite_name, "name" : record.name})
         result = record.result
         if result == report.Result.SKIPPED:
             ET.SubElement(testcase, "skipped")
