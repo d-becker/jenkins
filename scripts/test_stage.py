@@ -15,6 +15,8 @@ import traceback
 
 from typing import Any, List
 
+import yaml
+
 import dbd_build
 import output
 import oozie_testing.examples
@@ -217,6 +219,17 @@ def start_cluster_and_perform_testing(args: argparse.Namespace,
 
     return exit_code
 
+def test_all_configurations(args: argparse.Namespace,
+                            reports_dir: Path,
+                            build_config_dirs: List[Path],
+                            timeout: int) -> List[int]:
+    res = []
+    for build_config_dir in build_config_dirs:
+        return_code = start_cluster_and_perform_testing(args, reports_dir, build_config_dir, timeout)
+        res.append(return_code)
+
+    return res
+
 def main() -> None:
     """
     The entry point of the script.
@@ -231,13 +244,12 @@ def main() -> None:
     cache_dir = Path("./dbd_cache")
     timeout = args.timeout if args.timeout is not None else 180
 
+    # TODO: Clean up even in case of an exception.
     dbd_build.build_configs_with_dbd(configurations_dir, args.configurations, output_dir, dbd_path, cache_dir)
 
-    build_config_dirs = output_dir.expanduser().resolve().iterdir()
+    build_config_dirs = list(output_dir.expanduser().resolve().iterdir())
 
-    test_exit_codes = map(
-        lambda build_config_dir: start_cluster_and_perform_testing(args, reports_dir, build_config_dir, timeout),
-        build_config_dirs)
+    test_exit_codes = test_all_configurations(args, reports_dir, build_config_dirs, timeout)
 
     max_exit_code = max(test_exit_codes)
 

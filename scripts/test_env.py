@@ -103,6 +103,12 @@ def docker_compose_down(directory: Path) -> None:
     if process_result.returncode != 0:
         raise DockerSubprocessException("Error: `docker-compose down` failed.", process_result)
 
+def docker_remove_image(image_name: str) -> None:
+    logging.info("Removing docker image %s.", image_name)
+    docker_client = docker.from_env()
+
+    docker_client.images.remove(image_name)
+
 def docker_cp_to_container(container_name: str, source: str, dest: str) -> None:
     """
     Copies a file or directory from the local file system to a running docker container.

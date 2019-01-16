@@ -26,13 +26,18 @@ pipeline {
         string(defaultValue: '180',
             description: 'The timeout after which running examples are killed.',
             name: 'timeout')
+	booleanParam(defaultValue: false,
+            description: 'Whether the script should clean up after running (cleanup before running always happens).',
+            name: 'cleanup_after_run')
+	booleanParam(defaultValue: false,
+            description: 'Whether the script should remove the generated docker images.',
+            name: 'remove_docker_images')
     }
 
     stages {
         stage('cleanup') {
             steps {
-                sh 'if [ -e testing ]; then rm -r testing; fi'
-                sh 'mkdir testing'
+                cleanup()
             }
         }
         stage('clone-dbd') {
@@ -106,4 +111,22 @@ pipeline {
             }
         }
     }
+    post {
+        always {
+            script {
+	        if (params.remove_docker_images) {
+		    sh 'python3 scripts/remove_generated_docker_images.py testing/output'
+		}
+
+                if (params.cleanup_after_run) {
+                    cleanup()
+                }
+            }
+        }
+    }
+}
+
+void cleanup() {
+    sh 'if [ -e testing ]; then rm -r testing; fi'
+    sh 'mkdir testing'
 }
