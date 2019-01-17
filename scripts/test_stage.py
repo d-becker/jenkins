@@ -15,8 +15,6 @@ import traceback
 
 from typing import Any, List
 
-import yaml
-
 import dbd_build
 import output
 import oozie_testing.examples
@@ -69,6 +67,8 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--validate", nargs="*",
                         help="A list of fluent examples that should only be validated, not run.")
     parser.add_argument("-t", "--timeout", type=int, help="The timeout after which running examples are killed.")
+    parser.add_argument("-s", "--cache_size", required=True,
+                        help="the maximal number of (regular) files that are allowed to be in the cache")
 
     return parser
 
@@ -223,6 +223,24 @@ def test_all_configurations(args: argparse.Namespace,
                             reports_dir: Path,
                             build_config_dirs: List[Path],
                             timeout: int) -> List[int]:
+    """
+    Runs the tests in all the `BuildConfiguration`s.
+
+    Args:
+        args: The arguments parsed from the command line.
+        reports_dir: The directory where the reports of the various `BuildConfiguration`s' test results
+            should be located. The reports for the individual `BuildConfigurations` will be placed in
+            subdirectories with the name of the `BuildConfiguration`.
+        build_config_dirs: The directories where the `BuildConfiguration`s
+            are built and where the docker-compose files are located.
+        timeout: The timeout after which running examples are killed.
+
+    Returns:
+        A list with the exit codes of the processes running the example tests.
+        The values are 1 if any tests failed and 2 if an exception occurred - 0 otherwise.
+
+    """
+
     res = []
     for build_config_dir in build_config_dirs:
         return_code = start_cluster_and_perform_testing(args, reports_dir, build_config_dir, timeout)
@@ -244,8 +262,8 @@ def main() -> None:
     cache_dir = Path("./dbd_cache")
     timeout = args.timeout if args.timeout is not None else 180
 
-    # TODO: Clean up even in case of an exception.
-    dbd_build.build_configs_with_dbd(configurations_dir, args.configurations, output_dir, dbd_path, cache_dir)
+    dbd_build.build_configs_with_dbd(configurations_dir, args.configurations,
+                                     output_dir, dbd_path, cache_dir, args.cache_size)
 
     build_config_dirs = list(output_dir.expanduser().resolve().iterdir())
 

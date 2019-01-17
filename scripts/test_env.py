@@ -104,6 +104,14 @@ def docker_compose_down(directory: Path) -> None:
         raise DockerSubprocessException("Error: `docker-compose down` failed.", process_result)
 
 def docker_remove_image(image_name: str) -> None:
+    """
+    Removes a docker image with the given name.
+
+    Args:
+        image_name: The name (tag) of the docker image to remove.
+
+    """
+
     logging.info("Removing docker image %s.", image_name)
     docker_client = docker.from_env()
 

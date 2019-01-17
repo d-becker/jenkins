@@ -12,7 +12,7 @@ pipeline {
             name: 'oozie_branch')
         string(defaultValue: 'configuration',
             description: 'A list of filenames in the `configurations` directory. ' +
-	                 'If provided, only the `BuildConfiguration`s in the list will be built.',
+                         'If provided, only the `BuildConfiguration`s in the list will be built.',
             name: 'configuration_files')
         string(defaultValue: 'map-reduce Fluent_JavaMain',
             description: 'The names of the example tests to be run. An empty list means all non-blacklisted tests will be run.',
@@ -26,10 +26,13 @@ pipeline {
         string(defaultValue: '180',
             description: 'The timeout after which running examples are killed.',
             name: 'timeout')
-	booleanParam(defaultValue: false,
+        string(defaultValue: '10',
+            description: 'The maximal number of (regular) files that are allowed to be kept in the cache.',
+            name: 'cache_size')
+        booleanParam(defaultValue: false,
             description: 'Whether the script should clean up after running (cleanup before running always happens).',
             name: 'cleanup_after_run')
-	booleanParam(defaultValue: false,
+        booleanParam(defaultValue: false,
             description: 'Whether the script should remove the generated docker images.',
             name: 'remove_docker_images')
     }
@@ -85,12 +88,14 @@ pipeline {
 
                     def script_timeout = ""
                     if (params.timeout.length() > 0) {
-                        script_timeout = "-t ${params.timeout}"
+                        script_timeout = "-t ${params.timeout} "
                     }
+
+                    def script_cache_size = "--cache_size ${params.cache_size} "
 
                     def script = script_base + script_build_config_files +
                                  script_whitelist + script_blacklist +
-                                 script_validate_only + script_timeout
+                                 script_validate_only + script_timeout + script_cache_size
 
                     def returnCode = sh (script: script,
                                          returnStatus: true)
@@ -114,9 +119,9 @@ pipeline {
     post {
         always {
             script {
-	        if (params.remove_docker_images) {
-		    sh 'python3 scripts/remove_generated_docker_images.py testing/output'
-		}
+                if (params.remove_docker_images) {
+                    sh 'python3 scripts/remove_generated_docker_images.py testing/output'
+                }
 
                 if (params.cleanup_after_run) {
                     cleanup()
