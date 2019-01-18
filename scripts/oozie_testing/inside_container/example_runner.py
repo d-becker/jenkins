@@ -568,11 +568,12 @@ def _get_example_result(example: Example,
     # We catch all exceptions to be able to log them.
     # pylint: disable=bare-except
     except:
-        err_stream = io.StringIO()
-        err_stream.write("An exception occured trying to run or validate the example {}.".format(example.name()))
-        traceback.print_exc(file=err_stream)
-        logging.error(err_stream.getvalue())
-        return report.ReportRecord(example.name(), report.Result.ERROR, None, [], stderr=err_stream.getvalue())
+        tb_string = traceback.format_exc()
+        error_msg = "An exception occured trying to run or validate the example {}.\n\n{}".format(example.name(),
+                                                                                                  tb_string)
+        
+        logging.error(error_msg)
+        return report.ReportRecord(example.name(), report.Result.ERROR, None, [], stderr=error_msg)
 
 def run_examples(examples: Iterable[Example],
                  whitelist: Optional[List[str]],
@@ -713,9 +714,8 @@ def main() -> None:
     # We catch all exceptions to be able to log them.
     # pylint: disable=bare-except
     except:
-        err_stream = io.StringIO()
-        traceback.print_exc(file=err_stream)
-        logging.error(err_stream.getvalue())
+        tb_string = traceback.format_exc()
+        logging.error(tb_string)
         sys.exit(2)
 
     if not all(map(lambda r: r.result == report.Result.SUCCEEDED or r.result == report.Result.SKIPPED, report_records)):
