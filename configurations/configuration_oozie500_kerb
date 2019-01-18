@@ -1,0 +1,7 @@
+name: oozie500hadoop285
+kerberos: true
+components:
+  hadoop:
+   release: 2.8.5
+  oozie:
+    release: 5.0.0

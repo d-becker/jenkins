@@ -107,6 +107,7 @@ def copy_logs(oozieserver_name: str,
     test_env.copy_logfile_and_report_records(oozieserver_name, logfile, report_records_file, current_report_dir)
     test_env.copy_oozie_logs(oozieserver_name, current_report_dir / "oozieserver")
     test_env.copy_yarn_logs(nodemanager_name, current_report_dir / "nodemanager")
+    test_env.copy_nodemanager_logs(nodemanager_name, current_report_dir / "nodemanager")
 
 def write_report(build_config_name: str,
                  current_report_dir: Path,

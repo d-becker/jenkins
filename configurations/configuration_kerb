@@ -1,4 +1,5 @@
-name: oozie_upstream_hadoop265
+name: oozie_upstream_hadoop285_kerb
+kerberos: true
 components:
   hadoop:
    release: 2.8.5

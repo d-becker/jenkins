@@ -247,3 +247,14 @@ def copy_logfile_and_report_records(oozieserver_name: str, logfile: str, report_
 
     docker_cp_from_container(oozieserver_name, "/opt/oozie/{}".format(logfile), str(output))
     docker_cp_from_container(oozieserver_name, "/opt/oozie/{}".format(report_file), str(output))
+
+def copy_nodemanager_logs(nodemanager_name: str, output: Path) -> None:
+    logging.info("Copying the nodemanager logs.")
+    command = ["docker", "logs", nodemanager_name]
+    process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if process_result.returncode != 0:
+        raise DockerSubprocessException("Error: `docker logs` failed.", process_result)
+
+    with (output.expanduser().resolve() / "nodemanager.log").open("w") as logfile:
+        logfile.write(process_result.stdout.decode())

@@ -176,5 +176,5 @@ class TestOutput(unittest.TestCase):
             tempdir = Path(tempdir_name)
             TestOutput._fill_directory_with_logs(tempdir)
             report_records = TestOutput._create_report_records()
-            generated_report = output.generate_report(report_records, tempdir)
+            generated_report = output.generate_report("Testsuite_name", report_records, tempdir)
             return generated_report

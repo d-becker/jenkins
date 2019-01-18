@@ -8,7 +8,6 @@ It should be run on the Oozie server, with the Oozie examples uploaded to hdfs.
 from abc import ABCMeta, abstractmethod
 
 import argparse
-import io
 import itertools
 import json
 import logging
@@ -17,6 +16,7 @@ from pathlib import Path
 
 import pickle
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -26,6 +26,16 @@ import traceback
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import urllib.request
+
+# We try to import the modules needed for Kerberos HTTP requests.
+# If successful, we will use them, if not, we do not use kerberos.
+KERBEROS: bool
+try:
+    import requests
+    import requests_kerberos
+    KERBEROS = True
+except ModuleNotFoundError:
+    KERBEROS = False
 
 # pylint: disable=useless-import-alias
 try:
@@ -76,10 +86,36 @@ class OozieSubprocessResult:
                                        self.stdout,
                                        self.stderr)
 
-def _send_request(url: str) -> str:
+def _get_docker_long_fqdn() -> str:
+    get_ip_command = ["dig", "+short", socket.gethostname()]
+    ip_process_result = subprocess.run(get_ip_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    ip_addr = ip_process_result.stdout.decode().strip()
+
+    reverse_dns_command = ["dig", "+short", "-x", ip_addr]
+    reverse_dns_process_result = subprocess.run(reverse_dns_command,
+                                                stdout=subprocess.PIPE,
+                                                stderr=subprocess.PIPE, check=True)
+
+    # Delete the last '.' character that dig adds to the reverse DNS result.
+    fqdn = reverse_dns_process_result.stdout.decode().strip()[:-1]
+    return fqdn
+
+def _send_request_kerberos(url: str) -> str:
+    kerberos_auth = requests_kerberos.HTTPKerberosAuth(mutual_authentication=requests_kerberos.OPTIONAL)
+    response = requests.get(url, auth=kerberos_auth)
+    return response.text
+
+def _send_request_unsecure(url: str) -> str:
     with urllib.request.urlopen(url) as connection:
         response = connection.read().decode()
         return response
+
+def _send_request(url: str) -> str:
+    # pylint: disable=no-else-return
+    if KERBEROS:
+        return _send_request_kerberos(url)
+    else:
+        return _send_request_unsecure(url)
 
 def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union[str, int]:
     process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -98,16 +134,19 @@ def _launch_oozie_job_by_command(command: List[str], example_name: str) -> Union
 
     return job_id
 
-def _get_oozie_logs(job_id: str) -> Tuple[str, str]:
-    url_logs = "http://localhost:11000/oozie/v1/job/{}?show=log".format(job_id)
+def _get_oozie_logs(oozie_url: str, job_id: str) -> Tuple[str, str]:
+    url_logs_endpoint = "/v1/job/{}?show=log".format(job_id)
+    url_logs = oozie_url + url_logs_endpoint
     logs = _send_request(url_logs)
 
-    url_error_logs = "http://localhost:11000/oozie/v2/job/{}?show=errorlog".format(job_id)
+    url_error_logs_endpoint = "/v2/job/{}?show=errorlog".format(job_id)
+    url_error_logs = oozie_url + url_error_logs_endpoint
     error_logs = _send_request(url_error_logs)
 
     return (logs, error_logs)
 
-def _launch_and_wait_for_oozie_job(command: List[str],
+def _launch_and_wait_for_oozie_job(oozie_url: str,
+                                   command: List[str],
                                    example_name: str,
                                    poll_time: int,
                                    timeout: int) -> report.ReportRecord:
@@ -121,9 +160,9 @@ def _launch_and_wait_for_oozie_job(command: List[str],
 
     logging.info("Oozie job id: %s.", launch_result)
 
-    final_status = wait_for_job_to_finish(launch_result, example_name, poll_time, timeout)
-    applications = get_yarn_applications_of_job(launch_result)
-    (oozie_logs, oozie_error_logs) = _get_oozie_logs(launch_result)
+    final_status = wait_for_job_to_finish(oozie_url, launch_result, example_name, poll_time, timeout)
+    applications = get_yarn_applications_of_job(oozie_url, launch_result)
+    (oozie_logs, oozie_error_logs) = _get_oozie_logs(oozie_url, launch_result)
 
     return report.ReportRecord(example_name, final_status, launch_result, applications,
                                stdout="Oozie logs:\n\n{}".format(oozie_logs),
@@ -171,9 +210,10 @@ class NormalExample(Example):
     A class representing a normal (non-fluent job) Oozie example.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, oozie_url: str) -> None:
         self._name = path.name
         self._path = path
+        self._oozie_url = oozie_url
 
     def name(self) -> str:
         return self._name
@@ -196,12 +236,14 @@ class NormalExample(Example):
                timeout: int) -> report.ReportRecord:
         command = ["/opt/oozie/bin/oozie",
                    "job",
+                   "-oozie",
+                   self._oozie_url,
                    "-config",
                    str(self.path / "job.properties"),
                    "-run"]
         command.extend(map(lambda option: "-D" + option, cli_options))
 
-        return _launch_and_wait_for_oozie_job(command, self.name(), poll_time, timeout)
+        return _launch_and_wait_for_oozie_job(self._oozie_url, command, self.name(), poll_time, timeout)
 
 # pylint: disable=abstract-method
 class FluentExampleBase(Example, metaclass=ABCMeta):
@@ -213,11 +255,13 @@ class FluentExampleBase(Example, metaclass=ABCMeta):
                  oozie_version: str,
                  oozie_fluent_job_api_jar: Path,
                  example_dir: Path,
-                 class_name: str) -> None:
+                 class_name: str,
+                 oozie_url: str) -> None:
         self._oozie_version = oozie_version
         self._oozie_fluent_job_api_jar = oozie_fluent_job_api_jar
         self._example_dir = example_dir
         self._class_name = class_name
+        self._oozie_url = oozie_url
 
     def name(self) -> str:
         return "Fluent_{}".format(self._class_name)
@@ -317,9 +361,16 @@ class FluentExample(FluentExampleBase):
             job_properties_file = Path(tmp) / "job.properties"
             self.create_job_properties(job_properties_file, cli_options, self._oozie_version)
 
-            command = ["/opt/oozie/bin/oozie", "job", "-runjar", str(jar_path), "-config", str(job_properties_file)]
+            command = ["/opt/oozie/bin/oozie",
+                       "job",
+                       "-oozie",
+                       self._oozie_url,
+                       "-runjar",
+                       str(jar_path),
+                       "-config",
+                       str(job_properties_file)]
 
-            return _launch_and_wait_for_oozie_job(command, self.name(), poll_time, timeout)
+            return _launch_and_wait_for_oozie_job(self._oozie_url, command, self.name(), poll_time, timeout)
 
 class FluentExampleValidateOnly(FluentExampleBase):
     """
@@ -339,7 +390,7 @@ class FluentExampleValidateOnly(FluentExampleBase):
                                            stdout=jar_path.stdout,
                                            stderr=jar_path.to_string())
 
-            command = ["/opt/oozie/bin/oozie", "job", "-validatejar", str(jar_path)]
+            command = ["/opt/oozie/bin/oozie", "job", "-oozie", self._oozie_url, "-validatejar", str(jar_path)]
 
             logging.info("Validating fluent example %s with command %s.", self.name(), command)
             process_result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -357,11 +408,12 @@ class FluentExampleValidateOnly(FluentExampleBase):
 
             return report.ReportRecord(self.name(), final_status, None, [], stdout, stderr)
 
-def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
+def get_all_normal_examples(oozie_url: str, example_apps_dir: Path) -> Iterable[NormalExample]:
     """
     Returns the normal (non-fluent job) examples contained in `example_apps_dir`.
 
      Args:
+        oozie_url: The URL of the Oozie server.
         example_apps_dirs: The `apps` subdirectory in the root directory of the Oozie examples.
 
      Returns:
@@ -369,9 +421,9 @@ def get_all_normal_examples(example_apps_dir: Path) -> Iterable[NormalExample]:
 
     """
 
-    return map(NormalExample, get_all_example_dirs(example_apps_dir))
+    return map(lambda path: NormalExample(path, oozie_url), get_all_example_dirs(example_apps_dir))
 
-def get_oozie_version() -> str:
+def get_oozie_version(oozie_url: str) -> str:
     """
     Queries the Oozie server running on localhost and returns the Oozie version.
 
@@ -380,18 +432,21 @@ def get_oozie_version() -> str:
 
     """
 
-    url = "http://localhost:11000/oozie/v2/admin/build-version"
+    url_endpoint = "/v2/admin/build-version"
+    url = oozie_url + url_endpoint
+
     response = _send_request(url)
 
     json_dict = json.loads(response)
     return json_dict["buildVersion"]
 
-def get_all_fluent_examples(example_dir: Path, validate_only: List[str]) -> Iterable[FluentExampleBase]:
+def get_all_fluent_examples(oozie_url: str, example_dir: Path, validate_only: List[str]) -> Iterable[FluentExampleBase]:
     """
     Returns the fluent job examples contained in `example_dir`. For the examples the names of which
     is in the `validate_only` list, `FluentExampleValidateOnly` objects will be returned.
 
      Args:
+        oozie_url: The URL of the Oozie server.
         example_dirs: The root directory of the Oozie examples.
         validate_only: A list of fluent examples that should only be validated, not run.
 
@@ -400,24 +455,28 @@ def get_all_fluent_examples(example_dir: Path, validate_only: List[str]) -> Iter
 
     """
 
-    oozie_version = get_oozie_version()
+    oozie_version = get_oozie_version(oozie_url)
     lib = example_dir.expanduser().resolve().parent / "lib"
     oozie_fluent_job_api_jar = lib / "oozie-fluent-job-api-{}.jar".format(oozie_version)
 
     if not oozie_fluent_job_api_jar.exists():
-        raise FileNotFoundError("Library jar file does not exist: {}.".format(oozie_fluent_job_api_jar))
+        logging.warning("Fluent job library jar file does not exist: %s. No fluent examples will be run.",
+                        str(oozie_fluent_job_api_jar))
+        return []
 
     java_files: Iterable[Path] = (example_dir / "src" / "org" / "apache" / "oozie" / "example" / "fluentjob").iterdir()
 
     into_fluent_example_normal = lambda java_file: FluentExample(oozie_version,
                                                                  oozie_fluent_job_api_jar,
                                                                  example_dir,
-                                                                 java_file.name.strip(".java"))
+                                                                 java_file.name.strip(".java"),
+                                                                 oozie_url)
 
     into_fluent_example_validate_only = lambda java_file: FluentExampleValidateOnly(oozie_version,
                                                                                     oozie_fluent_job_api_jar,
                                                                                     example_dir,
-                                                                                    java_file.name.strip(".java"))
+                                                                                    java_file.name.strip(".java"),
+                                                                                    oozie_url)
     into_fluent_example = lambda java_file: (into_fluent_example_validate_only(java_file)
                                              if "Fluent_{}".format(java_file.stem) in validate_only
                                              else into_fluent_example_normal(java_file))
@@ -456,11 +515,12 @@ def get_workflow_example_dirs(example_dir: Path) -> Iterable[Path]:
 
     return filter(condition, get_all_example_dirs(example_dir))
 
-def query_job(job_id: str) -> Union[str, OozieSubprocessResult]:
+def query_job(oozie_url: str, job_id: str) -> Union[str, OozieSubprocessResult]:
     """
     Queries and returns the status of an Oozie job.
 
     Args:
+        oozie_url: The URL of the Oozie server.
         job_id: The job_id of the Oozie job.
 
     Returns:
@@ -471,6 +531,8 @@ def query_job(job_id: str) -> Union[str, OozieSubprocessResult]:
 
     query_command = ["/opt/oozie/bin/oozie",
                      "job",
+                     "-oozie",
+                     oozie_url,
                      "-info",
                      job_id]
 
@@ -489,11 +551,12 @@ def query_job(job_id: str) -> Union[str, OozieSubprocessResult]:
 
     return status
 
-def kill_job(job_id: str) -> int:
+def kill_job(oozie_url: str, job_id: str) -> int:
     """
     Kills an Oozie job.
 
     Args:
+        oozie_url: The URL of the Oozie server.
         job_id: The job_id of the Oozie job.
 
     Returns:
@@ -503,18 +566,26 @@ def kill_job(job_id: str) -> int:
 
     kill_command = ["/opt/oozie/bin/oozie",
                     "job",
+                    "-oozie",
+                    oozie_url,
                     "-kill",
                     job_id]
 
     process_result = subprocess.run(kill_command, stderr=subprocess.PIPE)
     return process_result.returncode
 
-def wait_for_job_to_finish(job_id: str, name: str, poll_time: int = 1, timeout: int = 60) -> report.Result:
+def wait_for_job_to_finish(oozie_url: str,
+                           job_id: str,
+                           name: str,
+                           poll_time:
+                           int = 1,
+                           timeout: int = 60) -> report.Result:
     """
     Waits for an Oozie job to finish, polling it regularly with a period of `poll_time`.
     If the job does not finish before the given timeout is elapsed, it is killed.
 
     Args:
+        oozie_url: The URL of the Oozie server.
         job_id : The job_id of the Oozie job.
         name: The name of the example.
         poll_time: The interval at which the job will be polled, in seconds.
@@ -527,18 +598,18 @@ def wait_for_job_to_finish(job_id: str, name: str, poll_time: int = 1, timeout: 
 
     start_time = time.time()
 
-    status: Union[str, OozieSubprocessResult] = query_job(job_id)
+    status: Union[str, OozieSubprocessResult] = query_job(oozie_url, job_id)
     if isinstance(status, OozieSubprocessResult):
         logging.warning(status.to_string())
 
     while status == "RUNNING" and (time.time() - start_time) < timeout:
         time.sleep(poll_time)
-        status = query_job(job_id)
+        status = query_job(oozie_url, job_id)
 
     # pylint: disable=no-else-return
     if status == "RUNNING":
         logging.info("Timed out waiting for example %s to finish, killing it.", name)
-        kill_job(job_id)
+        kill_job(oozie_url, job_id)
         return report.Result.TIMED_OUT
     else:
         logging.info("Status: %s.", status)
@@ -571,7 +642,7 @@ def _get_example_result(example: Example,
         tb_string = traceback.format_exc()
         error_msg = "An exception occured trying to run or validate the example {}.\n\n{}".format(example.name(),
                                                                                                   tb_string)
-        
+
         logging.error(error_msg)
         return report.ReportRecord(example.name(), report.Result.ERROR, None, [], stderr=error_msg)
 
@@ -610,7 +681,7 @@ def _get_application_name_from_external_id(external_id: str) -> str:
     index = external_id.find("_")
     return "application{}".format(external_id[index:])
 
-def get_yarn_applications_of_job(job_id: str) -> List[str]:
+def get_yarn_applications_of_job(oozie_url: str, job_id: str) -> List[str]:
     """
     Retrieves the id's of the yarn applications of the provided Oozie job.
 
@@ -622,7 +693,8 @@ def get_yarn_applications_of_job(job_id: str) -> List[str]:
 
     """
 
-    url = "http://localhost:11000/oozie/v1/job/{}?show=info".format(job_id)
+    url_endpoint = "/v1/job/{}?show=info".format(job_id)
+    url = oozie_url + url_endpoint
     response = _send_request(url)
 
     json_dict = json.loads(response)
@@ -697,9 +769,12 @@ def main() -> None:
                             level=logging.INFO,
                             filename=logfile)
 
-        examples = get_all_normal_examples(EXAMPLE_DIR / "apps")
+        oozie_url = "http://" + _get_docker_long_fqdn() + ":11000/oozie"
+        logging.info("Using Oozie URL %s.", oozie_url)
+
+        examples = get_all_normal_examples(oozie_url, EXAMPLE_DIR / "apps")
         validate_only = args.validate if args.validate is not None else []
-        fluent_examples = get_all_fluent_examples(EXAMPLE_DIR, validate_only)
+        fluent_examples = get_all_fluent_examples(oozie_url, EXAMPLE_DIR, validate_only)
         report_records = run_examples(itertools.chain(examples, fluent_examples),
                                       args.whitelist,
                                       args.blacklist if args.blacklist is not None else BLACKLIST,
