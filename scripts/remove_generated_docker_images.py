@@ -53,6 +53,7 @@ def images_to_remove(build_output_dir: Path) -> Iterable[str]:
                         image_name = component_dict["image_name"]
                         yield image_name
             # pylint: disable=broad-except
+            # We want to catch all exceptions to continue the cleanup.
             except Exception as exception:
             # pylint: enable=broad-except
                 exception_msg = traceback.format_exception_only(type(exception), exception)[0].strip()
@@ -70,7 +71,14 @@ def main() -> None:
     build_output_dir = Path(sys.argv[1])
 
     for image_name in images_to_remove(build_output_dir.expanduser().resolve()):
-        test_env.docker_remove_image(image_name)
+        try:
+            test_env.docker_remove_image(image_name)
+        # pylint: disable=broad-except
+        # We want to catch all exceptions to continue the cleanup.
+        except Exception:
+        # pylint: enable=broad-except
+            error_msg = traceback.format_exc()
+            logging.warning("Couldn't delete image, continuing with the next one (if any):\n%s.", error_msg)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
