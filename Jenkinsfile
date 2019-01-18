@@ -121,6 +121,8 @@ pipeline {
             script {
                 if (params.remove_docker_images) {
                     sh 'python3 scripts/remove_generated_docker_images.py testing/output'
+		    sh 'docker container prune -f'
+		    sh 'docker image prune -f'
                 }
 
                 if (params.cleanup_after_run) {
