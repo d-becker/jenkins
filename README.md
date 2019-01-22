@@ -85,8 +85,22 @@ stripes, you can find the password. Copy it to the field on the web page and cli
    do. After setting the parameters, click `Build`. Your Jenkins job should be running.
 1. After the job has finished, a test result summary is generated. You can also download the logs of the Oozie server,
    Yarn containers and the testing framework itself from the `Build Artifacts`, all bundled up in an archive.
-   
-### Testing a custom Oozie build
+
+#### Testing a custom Oozie build
+To test an unreleased Oozie, use the `oozie_branch` parameter. Its value can be any git reference that git can check
+out, not just a branch name. The given version will be checked out and built, and the symlink `symlink_to_oozie_distro`
+will be set to point to it. In the `BuildConfiguration` file, use this symlink as the `snapshot` parameter value:
+
+```
+...
+oozie:
+   snapshot: symlink_to_oozie_distro
+...
+```
+
+It is not possible to test multiple different unreleased Oozie versions in the same test.
+
+### Avoiding Oozie compilation
 There is a hack to circumvent the Oozie building stage and use a pre-built Oozie in the tests. This may be useful when
 testing this framework to save time. For this to work, though, you need access to the file system of the Jenkins
 server. If you do not have it, you can try running Jenkins in a Docker container on your own machine. For information on
