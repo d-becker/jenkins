@@ -100,6 +100,14 @@ def _get_docker_long_fqdn() -> str:
     fqdn = reverse_dns_process_result.stdout.decode().strip()[:-1]
     return fqdn
 
+def _get_oozie_url() -> str:
+    if KERBEROS:
+        hostname = _get_docker_long_fqdn()
+    else:
+        hostname = "localhost"
+
+    return "http://" + hostname + ":11000/oozie"
+
 def _send_request_kerberos(url: str) -> str:
     kerberos_auth = requests_kerberos.HTTPKerberosAuth(mutual_authentication=requests_kerberos.OPTIONAL)
     response = requests.get(url, auth=kerberos_auth)
@@ -769,7 +777,7 @@ def main() -> None:
                             level=logging.INFO,
                             filename=logfile)
 
-        oozie_url = "http://" + _get_docker_long_fqdn() + ":11000/oozie"
+        oozie_url = _get_oozie_url()
         logging.info("Using Oozie URL %s.", oozie_url)
 
         examples = get_all_normal_examples(oozie_url, EXAMPLE_DIR / "apps")

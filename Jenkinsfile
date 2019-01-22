@@ -1,9 +1,14 @@
+String python_path(String workspace) {
+    return "${workspace}/opt/python-3.7.1/bin"
+}
+
+void cleanup() {
+    sh 'if [ -e testing ]; then rm -r testing; fi'
+    sh 'mkdir testing'
+}
+
 pipeline {
-    agent {
-        dockerfile {
-            args '--mount \'type=volume,src=m2,dst=/root/.m2\''
-        }
-    }
+    agent any
 
     parameters {
         string(defaultValue: 'master',
@@ -37,6 +42,10 @@ pipeline {
             name: 'remove_docker_images')
     }
 
+    environment {
+        PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$PATH"
+    }
+
     stages {
         stage('cleanup') {
             steps {
@@ -48,6 +57,24 @@ pipeline {
                 sh '/bin/bash -c "cd testing && git clone https://github.com/d-becker/dbd.git"'
             }
         }
+	stage('build-python') {
+	   steps {
+	       sh "cd testing && \
+	           mkdir custom_python && \
+	           cd custom_python && \
+	      	   wget https://www.python.org/ftp/python/3.7.1/Python-3.7.1.tgz && \
+	      	   tar zxvf Python-3.7.1.tgz && \
+	       	   cd Python-3.7.1 && \
+	      	   ./configure --prefix=${python_path(env.WORKSPACE)} && \
+              	   make && \
+              	   make install"
+	   }
+	}
+	stage('install-python-packages') {
+	    steps {
+                sh 'pip3 install docker pyyaml docker-compose'
+	    }
+	}
         stage('build-oozie') {
             steps {
                 sh "scripts/build_oozie_and_symlink.sh ${params.oozie_branch} ${params.configuration_files}"
@@ -125,9 +152,4 @@ pipeline {
             }
         }
     }
-}
-
-void cleanup() {
-    sh 'if [ -e testing ]; then rm -r testing; fi'
-    sh 'mkdir testing'
 }
