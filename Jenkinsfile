@@ -56,7 +56,7 @@ pipeline {
         }
         stage('build-oozie') {
             steps {
-                sh 'scripts/build_oozie_and_symlink.sh'
+                sh "scripts/build_oozie_and_symlink.sh ${params.configuration_files}"
             }
         }
         stage('dbd') {
