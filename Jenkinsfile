@@ -48,15 +48,9 @@ pipeline {
                 sh '/bin/bash -c "cd testing && git clone https://github.com/d-becker/dbd.git"'
             }
         }
-        stage('clone-oozie') {
-            steps {
-                sh '/bin/bash -c "cd testing && git clone https://github.com/apache/oozie.git"'
-                sh "/bin/bash -c \"cd testing/oozie && git checkout ${params.oozie_branch}\""
-            }
-        }
         stage('build-oozie') {
             steps {
-                sh "scripts/build_oozie_and_symlink.sh ${params.configuration_files}"
+                sh "scripts/build_oozie_and_symlink.sh ${params.oozie_branch} ${params.configuration_files}"
             }
         }
         stage('dbd') {
