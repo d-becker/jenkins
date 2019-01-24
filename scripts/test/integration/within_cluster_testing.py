@@ -22,7 +22,7 @@ if __name__ == "__main__":
     import report
     # pylint: enable=import-error
 
-def run_normal_example(path: Path) -> int:
+def run_normal_example(path: Path, oozie_url: str) -> int:
     """
     Runs a normal (non-fluent) example.
 
@@ -34,7 +34,7 @@ def run_normal_example(path: Path) -> int:
 
     """
 
-    example = example_runner.NormalExample(path)
+    example = example_runner.NormalExample(path, oozie_url)
     cli_options = example_runner.default_cli_options()
 
     options = (cli_options.get("all", []))
@@ -47,7 +47,7 @@ def run_normal_example(path: Path) -> int:
     else:
         return 2
 
-def run_fluent_example(example_dir: Path, class_name: str) -> int:
+def run_fluent_example(example_dir: Path, class_name: str, oozie_url: str) -> int:
     """
     Runs a fluent example.
 
@@ -60,12 +60,12 @@ def run_fluent_example(example_dir: Path, class_name: str) -> int:
 
     """
 
-    oozie_version = example_runner.get_oozie_version()
+    oozie_version = example_runner.get_oozie_version(oozie_url)
 
     lib = example_dir.expanduser().resolve().parent / "lib"
     oozie_fluent_job_api_jar = lib / "oozie-fluent-job-api-{}.jar".format(oozie_version)
 
-    example = example_runner.FluentExample(oozie_version, oozie_fluent_job_api_jar, example_dir, class_name)
+    example = example_runner.FluentExample(oozie_version, oozie_fluent_job_api_jar, example_dir, class_name, oozie_url)
 
     cli_options = example_runner.default_cli_options()
 
@@ -80,7 +80,7 @@ def run_fluent_example(example_dir: Path, class_name: str) -> int:
     else:
         return 2
 
-def build_fluent_example(example_dir: Path, class_name: str, build_dir: Path) -> int:
+def build_fluent_example(example_dir: Path, class_name: str, build_dir: Path, oozie_url: str) -> int:
     """
     Builds a fluent example.
 
@@ -94,12 +94,12 @@ def build_fluent_example(example_dir: Path, class_name: str, build_dir: Path) ->
 
     """
 
-    oozie_version = example_runner.get_oozie_version()
+    oozie_version = example_runner.get_oozie_version(oozie_url)
 
     lib = example_dir.expanduser().resolve().parent / "lib"
     oozie_fluent_job_api_jar = lib / "oozie-fluent-job-api-{}.jar".format(oozie_version)
 
-    example = example_runner.FluentExample(oozie_version, oozie_fluent_job_api_jar, example_dir, class_name)
+    example = example_runner.FluentExample(oozie_version, oozie_fluent_job_api_jar, example_dir, class_name, oozie_url)
 
     result = example.build_example(str(build_dir))
 
@@ -130,7 +130,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
 
     return parser
 
-EXAMPLE_DIR = Path("~/examples").expanduser()
+EXAMPLE_DIR: Path = Path("~/examples").expanduser()
 
 def main() -> None:
     """
@@ -138,13 +138,14 @@ def main() -> None:
     """
 
     args = get_argument_parser().parse_args()
+    oozie_url = "http://localhost:11000/oozie"
 
     if args.run_normal:
         path = Path("~/examples/apps").expanduser().resolve() / args.run_normal
-        res = run_normal_example(path)
+        res = run_normal_example(path, oozie_url)
     if args.run_fluent:
         class_name = args.run_fluent
-        res = run_fluent_example(EXAMPLE_DIR, class_name)
+        res = run_fluent_example(EXAMPLE_DIR, class_name, oozie_url)
 
     if args.build_fluent:
         class_name = args.build_fluent[0]
@@ -153,7 +154,7 @@ def main() -> None:
         build_dir = Path(build_dir_name).expanduser().resolve()
         build_dir.mkdir(exist_ok=True)
 
-        res = build_fluent_example(EXAMPLE_DIR, class_name, build_dir)
+        res = build_fluent_example(EXAMPLE_DIR, class_name, build_dir, oozie_url)
 
     sys.exit(res)
 
