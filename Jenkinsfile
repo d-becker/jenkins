@@ -44,6 +44,7 @@ pipeline {
 
     environment {
         PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$PATH"
+	MAVEN_HOME='/home/jenkins/tools/maven/latest'
     }
 
     stages {
