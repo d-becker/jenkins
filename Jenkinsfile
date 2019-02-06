@@ -51,7 +51,7 @@ pipeline {
     }
 
     environment {
-    	MAVEN_HOME = ${maven_home}
+    	MAVEN_HOME = maven_home
         PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$JAVA_HOME/bin:${maven_home}/bin:$PATH"
     }
 
