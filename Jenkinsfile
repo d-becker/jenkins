@@ -2,6 +2,8 @@ String python_path(String workspace) {
     return "${workspace}/opt/python-3.7.1/bin"
 }
 
+String maven_home = '/home/jenkins/tools/maven/latest'
+
 void cleanup() {
     sh 'if [ -e testing ]; then rm -r testing; fi'
     sh 'mkdir testing'
@@ -49,8 +51,8 @@ pipeline {
     }
 
     environment {
-    	MAVEN_HOME='/home/jenkins/tools/maven/latest'
-        PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:\$JAVA_HOME/bin:\$MAVEN_HOME/bin:\$PATH"
+    	MAVEN_HOME = ${maven_home}
+        PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$JAVA_HOME/bin:${maven_home}/bin:$PATH"
     }
 
     stages {
