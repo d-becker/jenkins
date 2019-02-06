@@ -49,11 +49,16 @@ pipeline {
     }
 
     environment {
-        PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$PATH"
-	// MAVEN_HOME='/home/jenkins/tools/maven/latest'
+    	MAVEN_HOME='/home/jenkins/tools/maven/latest'
+        PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:\$JAVA_HOME/bin:\$MAVEN_HOME/bin:\$PATH"
     }
 
     stages {
+    	stage('check-maven') {
+	    steps {
+	        sh 'which mvn'
+	    }
+	}
         stage('cleanup') {
             steps {
                 cleanup()
