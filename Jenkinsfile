@@ -8,7 +8,13 @@ void cleanup() {
 }
 
 pipeline {
-    agent any
+    agent {
+        label 'Hadoop&&!H9&&!H5&&!H6'
+    }
+
+    tools {
+    	jdk 'jdk8'
+    }
 
     parameters {
         string(defaultValue: 'master',
@@ -44,7 +50,7 @@ pipeline {
 
     environment {
         PATH = "${python_path(env.WORKSPACE)}:${python_path(env.WORKSPACE)}/bin:$PATH"
-	MAVEN_HOME='/home/jenkins/tools/maven/latest'
+	// MAVEN_HOME='/home/jenkins/tools/maven/latest'
     }
 
     stages {
