@@ -54,9 +54,10 @@ pipeline {
     }
 
     stages {
-    	stage('check-maven') {
-	    steps {
-	        sh 'which mvn'
+        stage('check-maven') {
+            steps {
+                sh 'echo $PATH'
+                sh 'which mvn'
 	    }
 	}
         stage('cleanup') {
